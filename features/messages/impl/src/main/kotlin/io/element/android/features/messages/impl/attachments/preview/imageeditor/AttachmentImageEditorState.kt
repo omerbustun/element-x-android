@@ -10,6 +10,9 @@ package io.element.android.features.messages.impl.attachments.preview.imageedito
 import androidx.annotation.FloatRange
 import androidx.compose.runtime.Immutable
 import io.element.android.libraries.mediaviewer.api.local.LocalMedia
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 
 private const val DEFAULT_CROP_MARGIN = 0f
 private const val MIN_CROP_SIZE = 0.1f
@@ -18,9 +21,19 @@ private const val MIN_CROP_SIZE = 0.1f
 data class AttachmentImageEditorState(
     val localMedia: LocalMedia,
     val edits: AttachmentImageEdits,
+    val activeTool: ImageEditorTool,
+    val penColor: MarkupColor,
     // For preview only
     val previewDebug: Boolean,
 )
+
+/**
+ * The tool the editor is currently driven by. Only one can handle drags at a time.
+ */
+enum class ImageEditorTool {
+    Crop,
+    Pen,
+}
 
 @Immutable
 data class AttachmentImageEdits(
@@ -28,6 +41,7 @@ data class AttachmentImageEdits(
     val rotationQuarterTurns: Int = 0,
     val isFlippedHorizontally: Boolean = false,
     val isFlippedVertically: Boolean = false,
+    val strokes: ImmutableList<MarkupStroke> = persistentListOf(),
 ) {
     val normalizedRotationQuarterTurns: Int
         get() = rotationQuarterTurns % 4
@@ -39,31 +53,39 @@ data class AttachmentImageEdits(
         get() = cropRect != NormalizedCropRect.default() ||
             normalizedRotationQuarterTurns != 0 ||
             isFlippedHorizontally ||
-            isFlippedVertically
+            isFlippedVertically ||
+            strokes.isNotEmpty()
 
     fun rotateAntiClockwise(): AttachmentImageEdits {
         return copy(
             rotationQuarterTurns = (normalizedRotationQuarterTurns + 3) % 4,
-            // Also update the crop rect to keep the same selected area
-            cropRect = cropRect.rotateAntiClockwise()
+            // Also update the crop rect and the markup to keep the same selected area
+            cropRect = cropRect.rotateAntiClockwise(),
+            strokes = strokes.map { it.rotateAntiClockwise() }.toImmutableList(),
         )
     }
 
     fun flipHorizontally(): AttachmentImageEdits {
         return copy(
             isFlippedHorizontally = !isFlippedHorizontally,
-            // Also update the crop rect to keep the same selected area
+            // Also update the crop rect and the markup to keep the same selected area
             cropRect = cropRect.flipHorizontally(),
+            strokes = strokes.map { it.flipHorizontally() }.toImmutableList(),
         )
     }
 
     fun flipVertically(): AttachmentImageEdits {
         return copy(
             isFlippedVertically = !isFlippedVertically,
-            // Also update the crop rect to keep the same selected area
+            // Also update the crop rect and the markup to keep the same selected area
             cropRect = cropRect.flipVertically(),
+            strokes = strokes.map { it.flipVertically() }.toImmutableList(),
         )
     }
+
+    fun addStroke(stroke: MarkupStroke) = copy(strokes = (strokes + stroke).toImmutableList())
+
+    fun removeLastStroke() = copy(strokes = strokes.dropLast(1).toImmutableList())
 }
 
 @Immutable

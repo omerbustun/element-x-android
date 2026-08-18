@@ -148,6 +148,10 @@ fun AttachmentsPreviewView(
             onCropRectChange = { cropRect ->
                 state.eventSink(AttachmentsPreviewEvent.UpdateImageCropRect(cropRect))
             },
+            onToolSelect = { tool -> state.eventSink(AttachmentsPreviewEvent.SelectImageEditorTool(tool)) },
+            onPenColorSelect = { color -> state.eventSink(AttachmentsPreviewEvent.SelectPenColor(color)) },
+            onStrokeAdd = { stroke -> state.eventSink(AttachmentsPreviewEvent.AddMarkupStroke(stroke)) },
+            onUndoStrokeClick = { state.eventSink(AttachmentsPreviewEvent.UndoMarkupStroke) },
             onRotateClick = { state.eventSink(AttachmentsPreviewEvent.RotateImageToTheLeft) },
             onFlipHorizontallyClick = { state.eventSink(AttachmentsPreviewEvent.FlipImageHorizontally) },
             onFlipVerticallyClick = { state.eventSink(AttachmentsPreviewEvent.FlipImageVertically) },

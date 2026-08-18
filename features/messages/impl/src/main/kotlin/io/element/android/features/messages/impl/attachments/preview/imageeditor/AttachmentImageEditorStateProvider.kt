@@ -11,6 +11,7 @@ import androidx.compose.ui.tooling.preview.PreviewParameterProvider
 import androidx.core.net.toUri
 import io.element.android.libraries.mediaviewer.api.anImageMediaInfo
 import io.element.android.libraries.mediaviewer.api.local.LocalMedia
+import kotlinx.collections.immutable.persistentListOf
 
 open class AttachmentImageEditorStateProvider : PreviewParameterProvider<AttachmentImageEditorState> {
     private val caterpillarCrop = NormalizedCropRect(
@@ -85,6 +86,14 @@ open class AttachmentImageEditorStateProvider : PreviewParameterProvider<Attachm
                     cropRect = caterpillarCrop,
                 ).flipVertically(),
             ),
+            // Pen tool, with a stroke already drawn
+            anAttachmentImageEditorState(
+                edits = AttachmentImageEdits(
+                    strokes = persistentListOf(aMarkupStroke()),
+                ),
+                activeTool = ImageEditorTool.Pen,
+                penColor = MarkupColor.Red,
+            ),
         )
 }
 
@@ -94,9 +103,22 @@ internal fun anAttachmentImageEditorState(
         info = anImageMediaInfo(),
     ),
     edits: AttachmentImageEdits = AttachmentImageEdits(),
+    activeTool: ImageEditorTool = ImageEditorTool.Crop,
+    penColor: MarkupColor = MarkupColor.White,
     previewDebug: Boolean = false,
 ) = AttachmentImageEditorState(
     localMedia = localMedia,
     edits = edits,
+    activeTool = activeTool,
+    penColor = penColor,
     previewDebug = previewDebug,
+)
+
+internal fun aMarkupStroke(color: MarkupColor = MarkupColor.Red) = MarkupStroke(
+    points = persistentListOf(
+        NormalizedPoint(x = 0.2f, y = 0.3f),
+        NormalizedPoint(x = 0.4f, y = 0.5f),
+        NormalizedPoint(x = 0.7f, y = 0.35f),
+    ),
+    color = color,
 )

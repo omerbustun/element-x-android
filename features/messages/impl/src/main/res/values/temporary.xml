@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?><!--
+  ~ Copyright (c) 2026 Element Creations Ltd.
+  ~
+  ~ SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Element-Commercial.
+  ~ Please see LICENSE files in the repository root for full details.
+  -->
+
+<resources>
+    <string name="screen_image_edition_a11y_crop_tool">"Crop the image"</string>
+    <string name="screen_image_edition_a11y_pen_tool">"Draw on the image"</string>
+    <string name="screen_image_edition_a11y_undo_stroke">"Undo the last stroke"</string>
+    <string name="screen_image_edition_a11y_pen_colour_black">"Black"</string>
+    <string name="screen_image_edition_a11y_pen_colour_blue">"Blue"</string>
+    <string name="screen_image_edition_a11y_pen_colour_green">"Green"</string>
+    <string name="screen_image_edition_a11y_pen_colour_orange">"Orange"</string>
+    <string name="screen_image_edition_a11y_pen_colour_purple">"Purple"</string>
+    <string name="screen_image_edition_a11y_pen_colour_red">"Red"</string>
+    <string name="screen_image_edition_a11y_pen_colour_white">"White"</string>
+    <string name="screen_image_edition_a11y_pen_colour_yellow">"Yellow"</string>
+    <string name="screen_image_edition_a11y_selected">"Selected"</string>
+</resources>

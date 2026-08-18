@@ -10,8 +10,12 @@ package io.element.android.features.messages.impl.attachments.preview.imageedito
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
 import android.graphics.Matrix
+import android.graphics.Paint
+import android.graphics.Path
 import android.net.Uri
+import androidx.compose.ui.graphics.toArgb
 import androidx.exifinterface.media.ExifInterface
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
@@ -92,25 +96,32 @@ class DefaultAttachmentImageEditor(
                 normalizedBitmap.recycle()
             }
 
+            // Draw the markup before cropping, so that strokes outside of the crop area are trimmed
+            // along with the image, exactly as they appear behind the crop overlay.
+            val markedUpBitmap = transformedBitmap.drawMarkup(edits.strokes)
+            if (markedUpBitmap !== transformedBitmap) {
+                transformedBitmap.recycle()
+            }
+
             val cropRect = edits.cropRect.toPixelRect(
-                imageWidth = transformedBitmap.width,
-                imageHeight = transformedBitmap.height,
+                imageWidth = markedUpBitmap.width,
+                imageHeight = markedUpBitmap.height,
             )
             val isCropUnchanged = cropRect.left == 0 && cropRect.top == 0 &&
-                cropRect.width() == transformedBitmap.width && cropRect.height() == transformedBitmap.height
+                cropRect.width() == markedUpBitmap.width && cropRect.height() == markedUpBitmap.height
             val croppedBitmap = if (isCropUnchanged) {
-                transformedBitmap
+                markedUpBitmap
             } else {
                 Bitmap.createBitmap(
-                    transformedBitmap,
+                    markedUpBitmap,
                     cropRect.left,
                     cropRect.top,
                     cropRect.width(),
                     cropRect.height(),
                 )
             }
-            if (croppedBitmap !== transformedBitmap) {
-                transformedBitmap.recycle()
+            if (croppedBitmap !== markedUpBitmap) {
+                markedUpBitmap.recycle()
             }
 
             val editedMediaDir = File(context.cacheDir, EDITED_MEDIA_DIR_NAME).apply { mkdirs() }
@@ -159,6 +170,43 @@ private fun Bitmap.applyEdits(edits: AttachmentImageEdits): Bitmap {
         }
     }
     return Bitmap.createBitmap(this, 0, 0, width, height, matrix, true)
+}
+
+internal fun Bitmap.drawMarkup(strokes: List<MarkupStroke>): Bitmap {
+    if (strokes.isEmpty()) {
+        return this
+    }
+    val target = copy(Bitmap.Config.ARGB_8888, true) ?: return this
+    val canvas = Canvas(target)
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
+        strokeWidth = minOf(target.width, target.height) * MarkupStroke.RELATIVE_WIDTH
+    }
+    for (stroke in strokes) {
+        val points = stroke.points
+        if (points.isEmpty()) continue
+        paint.color = stroke.color.value.toArgb()
+        if (points.size == 1) {
+            // A tap leaves a single point behind, which a path would not render.
+            canvas.drawCircle(
+                points[0].x * target.width,
+                points[0].y * target.height,
+                paint.strokeWidth / 2f,
+                Paint(paint).apply { style = Paint.Style.FILL },
+            )
+            continue
+        }
+        val path = Path().apply {
+            moveTo(points[0].x * target.width, points[0].y * target.height)
+            for (index in 1 until points.size) {
+                lineTo(points[index].x * target.width, points[index].y * target.height)
+            }
+        }
+        canvas.drawPath(path, paint)
+    }
+    return target
 }
 
 private data class PixelCropRect(

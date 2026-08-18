@@ -27,6 +27,8 @@ import io.element.android.features.messages.impl.attachments.Attachment
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.AttachmentImageEditor
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.AttachmentImageEditorState
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.AttachmentImageEdits
+import io.element.android.features.messages.impl.attachments.preview.imageeditor.ImageEditorTool
+import io.element.android.features.messages.impl.attachments.preview.imageeditor.MarkupColor
 import io.element.android.features.messages.impl.attachments.video.MediaOptimizationSelectorPresenter
 import io.element.android.features.messages.impl.attachments.video.MediaOptimizationSelectorState
 import io.element.android.features.messages.impl.attachments.video.VideoCompressionPresetSelector
@@ -321,6 +323,8 @@ class AttachmentsPreviewPresenter(
                         imageEditorState = AttachmentImageEditorState(
                             localMedia = currentLocalMedia,
                             edits = attachmentsAndEdits.get(currentIndex).edits,
+                            activeTool = ImageEditorTool.Crop,
+                            penColor = MarkupColor.White,
                             previewDebug = false,
                         )
                     }
@@ -332,6 +336,26 @@ class AttachmentsPreviewPresenter(
                     val pendingState = imageEditorState ?: return
                     imageEditorState = pendingState.copy(
                         edits = pendingState.edits.copy(cropRect = event.cropRect)
+                    )
+                }
+                is AttachmentsPreviewEvent.SelectImageEditorTool -> {
+                    val pendingState = imageEditorState ?: return
+                    imageEditorState = pendingState.copy(activeTool = event.tool)
+                }
+                is AttachmentsPreviewEvent.SelectPenColor -> {
+                    val pendingState = imageEditorState ?: return
+                    imageEditorState = pendingState.copy(penColor = event.color)
+                }
+                is AttachmentsPreviewEvent.AddMarkupStroke -> {
+                    val pendingState = imageEditorState ?: return
+                    imageEditorState = pendingState.copy(
+                        edits = pendingState.edits.addStroke(event.stroke)
+                    )
+                }
+                AttachmentsPreviewEvent.UndoMarkupStroke -> {
+                    val pendingState = imageEditorState ?: return
+                    imageEditorState = pendingState.copy(
+                        edits = pendingState.edits.removeLastStroke()
                     )
                 }
                 AttachmentsPreviewEvent.RotateImageToTheLeft -> {

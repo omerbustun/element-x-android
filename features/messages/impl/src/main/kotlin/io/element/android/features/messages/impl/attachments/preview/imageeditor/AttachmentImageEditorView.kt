@@ -10,6 +10,8 @@ package io.element.android.features.messages.impl.attachments.preview.imageedito
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,11 +20,13 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -32,10 +36,14 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
@@ -74,6 +82,9 @@ import io.element.android.libraries.designsystem.theme.components.TextButton
 import io.element.android.libraries.designsystem.theme.components.TopAppBar
 import io.element.android.libraries.designsystem.utils.CommonDrawables
 import io.element.android.libraries.ui.strings.CommonStrings
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlin.math.min
 
 private val minHandleTouchRadius = 16.dp
@@ -87,6 +98,10 @@ private val maxHandleTouchRadius = 56.dp
 fun AttachmentImageEditorView(
     state: AttachmentImageEditorState,
     onCropRectChange: (NormalizedCropRect) -> Unit,
+    onToolSelect: (ImageEditorTool) -> Unit,
+    onPenColorSelect: (MarkupColor) -> Unit,
+    onStrokeAdd: (MarkupStroke) -> Unit,
+    onUndoStrokeClick: () -> Unit,
     onRotateClick: () -> Unit,
     onFlipHorizontallyClick: () -> Unit,
     onFlipVerticallyClick: () -> Unit,
@@ -144,93 +159,217 @@ fun AttachmentImageEditorView(
                 modifier = Modifier.weight(1f),
                 contentAlignment = Alignment.Center,
             ) {
-                CropEditorCanvas(
+                ImageEditorCanvas(
                     state = state,
                     onCropRectChange = onCropRectChange,
+                    onStrokeAdd = onStrokeAdd,
                 )
             }
-            Row(
+            Column(
                 modifier = Modifier
                     .align(Alignment.CenterHorizontally)
                     .widthIn(max = 360.dp)
                     .navigationBarsPadding()
                     .padding(start = 20.dp, top = 18.dp, end = 20.dp, bottom = 18.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Box(
-                    modifier = Modifier.weight(1f),
-                    contentAlignment = Alignment.CenterStart,
-                ) {
-                    TextButton(
-                        text = stringResource(CommonStrings.action_reset),
-                        destructive = true,
-                        onClick = onResetClick,
+                if (state.activeTool == ImageEditorTool.Pen) {
+                    PenColorPicker(
+                        selectedColor = state.penColor,
+                        onPenColorSelect = onPenColorSelect,
                     )
                 }
                 Row(
-                    modifier = Modifier.weight(2f),
-                    // Center the content horizontally
-                    horizontalArrangement = Arrangement.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    IconButton(
-                        onClick = onFlipHorizontallyClick,
-                        modifier = Modifier
-                            .clearAndSetSemantics {
-                                contentDescription = flipHorizontalLabel
-                                stateDescription = flipHorizontalState
-                            }
+                    Box(
+                        modifier = Modifier.weight(1f),
+                        contentAlignment = Alignment.CenterStart,
                     ) {
-                        Icon(
-                            imageVector = CompoundIcons.FlipHorizontal(),
-                            contentDescription = null,
+                        TextButton(
+                            text = stringResource(CommonStrings.action_reset),
+                            destructive = true,
+                            onClick = onResetClick,
                         )
                     }
-                    IconButton(
-                        onClick = onRotateClick,
-                        modifier = Modifier
-                            .clearAndSetSemantics {
-                                contentDescription = rotateContentDescription
-                                stateDescription = rotationStateDescription
-                            }
+                    Row(
+                        modifier = Modifier.weight(2f),
+                        // Center the content horizontally
+                        horizontalArrangement = Arrangement.Center,
                     ) {
-                        Icon(
-                            imageVector = CompoundIcons.RotateLeft(),
-                            contentDescription = null,
-                        )
+                        when (state.activeTool) {
+                            ImageEditorTool.Crop -> {
+                                IconButton(
+                                    onClick = onFlipHorizontallyClick,
+                                    modifier = Modifier
+                                        .clearAndSetSemantics {
+                                            contentDescription = flipHorizontalLabel
+                                            stateDescription = flipHorizontalState
+                                        }
+                                ) {
+                                    Icon(
+                                        imageVector = CompoundIcons.FlipHorizontal(),
+                                        contentDescription = null,
+                                    )
+                                }
+                                IconButton(
+                                    onClick = onRotateClick,
+                                    modifier = Modifier
+                                        .clearAndSetSemantics {
+                                            contentDescription = rotateContentDescription
+                                            stateDescription = rotationStateDescription
+                                        }
+                                ) {
+                                    Icon(
+                                        imageVector = CompoundIcons.RotateLeft(),
+                                        contentDescription = null,
+                                    )
+                                }
+                                IconButton(
+                                    onClick = onFlipVerticallyClick,
+                                    modifier = Modifier
+                                        .clearAndSetSemantics {
+                                            contentDescription = flipVerticalLabel
+                                            stateDescription = flipVerticalState
+                                        }
+                                ) {
+                                    Icon(
+                                        imageVector = CompoundIcons.FlipVertical(),
+                                        contentDescription = null,
+                                    )
+                                }
+                            }
+                            ImageEditorTool.Pen -> {
+                                IconButton(
+                                    onClick = onUndoStrokeClick,
+                                    enabled = state.edits.strokes.isNotEmpty(),
+                                ) {
+                                    Icon(
+                                        imageVector = CompoundIcons.Restart(),
+                                        contentDescription = stringResource(R.string.screen_image_edition_a11y_undo_stroke),
+                                    )
+                                }
+                            }
+                        }
                     }
-                    IconButton(
-                        onClick = onFlipVerticallyClick,
-                        modifier = Modifier
-                            .clearAndSetSemantics {
-                                contentDescription = flipVerticalLabel
-                                stateDescription = flipVerticalState
-                            }
+                    Box(
+                        modifier = Modifier.weight(1f),
+                        contentAlignment = Alignment.CenterEnd,
                     ) {
-                        Icon(
-                            imageVector = CompoundIcons.FlipVertical(),
-                            contentDescription = null,
+                        TextButton(
+                            text = stringResource(CommonStrings.action_save),
+                            onClick = onDoneClick,
                         )
                     }
                 }
-                Box(
-                    modifier = Modifier.weight(1f),
-                    contentAlignment = Alignment.CenterEnd,
-                ) {
-                    TextButton(
-                        text = stringResource(CommonStrings.action_save),
-                        onClick = onDoneClick,
-                    )
-                }
+                ToolPicker(
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                    activeTool = state.activeTool,
+                    onToolSelect = onToolSelect,
+                )
             }
         }
     }
 }
 
 @Composable
-private fun BoxScope.CropEditorCanvas(
+private fun ToolPicker(
+    activeTool: ImageEditorTool,
+    onToolSelect: (ImageEditorTool) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val selectedStateDescription = stringResource(R.string.screen_image_edition_a11y_selected)
+    Row(modifier = modifier) {
+        for (tool in ImageEditorTool.entries) {
+            val isSelected = tool == activeTool
+            val label = when (tool) {
+                ImageEditorTool.Crop -> stringResource(R.string.screen_image_edition_a11y_crop_tool)
+                ImageEditorTool.Pen -> stringResource(R.string.screen_image_edition_a11y_pen_tool)
+            }
+            IconButton(
+                onClick = { onToolSelect(tool) },
+                modifier = Modifier.clearAndSetSemantics {
+                    contentDescription = label
+                    if (isSelected) {
+                        stateDescription = selectedStateDescription
+                    }
+                },
+            ) {
+                Icon(
+                    imageVector = when (tool) {
+                        ImageEditorTool.Crop -> CompoundIcons.Crop()
+                        ImageEditorTool.Pen -> CompoundIcons.Edit()
+                    },
+                    contentDescription = null,
+                    tint = if (isSelected) ElementTheme.colors.iconAccentPrimary else ElementTheme.colors.iconSecondary,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PenColorPicker(
+    selectedColor: MarkupColor,
+    onPenColorSelect: (MarkupColor) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val selectedStateDescription = stringResource(R.string.screen_image_edition_a11y_selected)
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(bottom = 12.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+    ) {
+        for (color in MarkupColor.entries) {
+            val isSelected = color == selectedColor
+            val label = stringResource(color.a11yLabelResourceId())
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .clickable { onPenColorSelect(color) }
+                    .clearAndSetSemantics {
+                        contentDescription = label
+                        if (isSelected) {
+                            stateDescription = selectedStateDescription
+                        }
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(if (isSelected) 28.dp else 22.dp)
+                        .clip(CircleShape)
+                        .background(color.value)
+                        .border(
+                            width = if (isSelected) 2.dp else 1.dp,
+                            color = ElementTheme.colors.borderInteractiveSecondary,
+                            shape = CircleShape,
+                        )
+                )
+            }
+        }
+    }
+}
+
+private fun MarkupColor.a11yLabelResourceId() = when (this) {
+    MarkupColor.White -> R.string.screen_image_edition_a11y_pen_colour_white
+    MarkupColor.Black -> R.string.screen_image_edition_a11y_pen_colour_black
+    MarkupColor.Red -> R.string.screen_image_edition_a11y_pen_colour_red
+    MarkupColor.Orange -> R.string.screen_image_edition_a11y_pen_colour_orange
+    MarkupColor.Yellow -> R.string.screen_image_edition_a11y_pen_colour_yellow
+    MarkupColor.Green -> R.string.screen_image_edition_a11y_pen_colour_green
+    MarkupColor.Blue -> R.string.screen_image_edition_a11y_pen_colour_blue
+    MarkupColor.Purple -> R.string.screen_image_edition_a11y_pen_colour_purple
+}
+
+@Composable
+private fun BoxScope.ImageEditorCanvas(
     state: AttachmentImageEditorState,
     onCropRectChange: (NormalizedCropRect) -> Unit,
+    onStrokeAdd: (MarkupStroke) -> Unit,
 ) {
     var imageSize by remember(state.localMedia.uri) { mutableStateOf(IntSize.Zero) }
     val rotationQuarterTurns = state.edits.normalizedRotationQuarterTurns
@@ -332,43 +471,75 @@ private fun BoxScope.CropEditorCanvas(
         )
         var dragTarget by remember { mutableStateOf<CropDragTarget?>(null) }
         val latestCropRect by rememberUpdatedState(state.edits.cropRect)
+        val latestPenColor by rememberUpdatedState(state.penColor)
+        val latestImageRect by rememberUpdatedState(imageRect)
+        var strokeInProgress by remember { mutableStateOf(persistentListOf<NormalizedPoint>().toImmutableList()) }
         val drawGuidelines = dragTarget == CropDragTarget.Move || state.previewDebug
+        val gestureModifier = when (state.activeTool) {
+            ImageEditorTool.Crop -> Modifier.pointerInput(state.activeTool) {
+                detectDragGestures(
+                    onDragStart = { offset ->
+                        dragTarget = detectDragTarget(
+                            touchPoint = offset,
+                            imageOffset = latestImageRect.topLeft,
+                            cropRect = latestCropRect,
+                            canvasSize = Size(latestImageRect.width, latestImageRect.height),
+                            handleTouchRadius = touchRadiusPx,
+                        )
+                    },
+                    onDragCancel = {
+                        dragTarget = null
+                    },
+                    onDragEnd = {
+                        dragTarget = null
+                    },
+                ) { change, dragAmount ->
+                    val activeTarget = dragTarget ?: return@detectDragGestures
+                    change.consume()
+                    val gestureAreaWidth = latestImageRect.width.takeIf { it > 0f } ?: size.width.toFloat()
+                    val gestureAreaHeight = latestImageRect.height.takeIf { it > 0f } ?: size.height.toFloat()
+                    onCropRectChange(
+                        latestCropRect.applyChange(
+                            dragTarget = activeTarget,
+                            deltaX = dragAmount.x / gestureAreaWidth,
+                            deltaY = dragAmount.y / gestureAreaHeight,
+                        )
+                    )
+                }
+            }
+            ImageEditorTool.Pen -> Modifier.pointerInput(state.activeTool) {
+                detectDragGestures(
+                    onDragStart = { offset ->
+                        strokeInProgress = persistentListOf(offset.toNormalizedPoint(latestImageRect)).toImmutableList()
+                    },
+                    onDragCancel = {
+                        strokeInProgress = persistentListOf<NormalizedPoint>().toImmutableList()
+                    },
+                    onDragEnd = {
+                        val points = strokeInProgress
+                        strokeInProgress = persistentListOf<NormalizedPoint>().toImmutableList()
+                        if (points.isNotEmpty()) {
+                            onStrokeAdd(MarkupStroke(points = points, color = latestPenColor))
+                        }
+                    },
+                ) { change, _ ->
+                    change.consume()
+                    strokeInProgress = (strokeInProgress + change.position.toNormalizedPoint(latestImageRect)).toImmutableList()
+                }
+            }
+        }
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .pointerInput(Unit) {
-                    detectDragGestures(
-                        onDragStart = { offset ->
-                            dragTarget = detectDragTarget(
-                                touchPoint = offset,
-                                imageOffset = imageRect.topLeft,
-                                cropRect = latestCropRect,
-                                canvasSize = Size(imageRect.width, imageRect.height),
-                                handleTouchRadius = touchRadiusPx,
-                            )
-                        },
-                        onDragCancel = {
-                            dragTarget = null
-                        },
-                        onDragEnd = {
-                            dragTarget = null
-                        },
-                    ) { change, dragAmount ->
-                        val activeTarget = dragTarget ?: return@detectDragGestures
-                        change.consume()
-                        val gestureAreaWidth = imageRect.width.takeIf { it > 0f } ?: size.width.toFloat()
-                        val gestureAreaHeight = imageRect.height.takeIf { it > 0f } ?: size.height.toFloat()
-                        onCropRectChange(
-                            latestCropRect.applyChange(
-                                dragTarget = activeTarget,
-                                deltaX = dragAmount.x / gestureAreaWidth,
-                                deltaY = dragAmount.y / gestureAreaHeight,
-                            )
-                        )
-                    }
-                },
+                .then(gestureModifier),
             contentAlignment = Alignment.Center,
         ) {
+            MarkupOverlay(
+                imageSize = DpSize(displayedWidthDp, displayedHeightDp),
+                strokes = state.edits.strokes,
+                strokeInProgress = strokeInProgress,
+                penColor = state.penColor,
+            )
             CropOverlay(
                 imageSize = DpSize(displayedWidthDp, displayedHeightDp),
                 cropRect = state.edits.cropRect,
@@ -379,6 +550,64 @@ private fun BoxScope.CropEditorCanvas(
             )
         }
     }
+}
+
+/**
+ * Draws the strokes the user has already made, plus the one currently being drawn.
+ */
+@Composable
+private fun MarkupOverlay(
+    imageSize: DpSize,
+    strokes: ImmutableList<MarkupStroke>,
+    strokeInProgress: ImmutableList<NormalizedPoint>,
+    penColor: MarkupColor,
+) {
+    Canvas(
+        modifier = Modifier.size(imageSize.width, imageSize.height)
+    ) {
+        val strokeWidth = minOf(size.width, size.height) * MarkupStroke.RELATIVE_WIDTH
+        for (stroke in strokes) {
+            drawMarkupStroke(points = stroke.points, color = stroke.color.value, strokeWidth = strokeWidth)
+        }
+        drawMarkupStroke(points = strokeInProgress, color = penColor.value, strokeWidth = strokeWidth)
+    }
+}
+
+private fun DrawScope.drawMarkupStroke(
+    points: ImmutableList<NormalizedPoint>,
+    color: Color,
+    strokeWidth: Float,
+) {
+    if (points.isEmpty()) return
+    if (points.size == 1) {
+        // A tap leaves a single point behind, which a path would not render.
+        drawCircle(
+            color = color,
+            radius = strokeWidth / 2f,
+            center = Offset(points[0].x * size.width, points[0].y * size.height),
+        )
+        return
+    }
+    val path = Path().apply {
+        moveTo(points[0].x * size.width, points[0].y * size.height)
+        for (index in 1 until points.size) {
+            lineTo(points[index].x * size.width, points[index].y * size.height)
+        }
+    }
+    drawPath(
+        path = path,
+        color = color,
+        style = Stroke(width = strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round),
+    )
+}
+
+private fun Offset.toNormalizedPoint(imageRect: Rect): NormalizedPoint {
+    val width = imageRect.width.takeIf { it > 0f } ?: 1f
+    val height = imageRect.height.takeIf { it > 0f } ?: 1f
+    return NormalizedPoint(
+        x = ((x - imageRect.left) / width).coerceIn(0f, 1f),
+        y = ((y - imageRect.top) / height).coerceIn(0f, 1f),
+    )
 }
 
 @Composable
@@ -681,6 +910,10 @@ internal fun AttachmentImageEditorViewPreview(
     AttachmentImageEditorView(
         state = state,
         onCropRectChange = {},
+        onToolSelect = {},
+        onPenColorSelect = {},
+        onStrokeAdd = {},
+        onUndoStrokeClick = {},
         onRotateClick = {},
         onFlipHorizontallyClick = {},
         onFlipVerticallyClick = {},
