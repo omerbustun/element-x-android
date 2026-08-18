@@ -75,6 +75,8 @@ import io.element.android.libraries.designsystem.theme.components.Switch
 import io.element.android.libraries.designsystem.theme.components.Text
 import io.element.android.libraries.designsystem.theme.components.TopAppBar
 import io.element.android.libraries.designsystem.theme.floatingDateBadgeBackground
+import io.element.android.libraries.emoji.api.picker.EmojiPickerRenderer
+import io.element.android.libraries.emoji.api.picker.NoOpEmojiPickerRenderer
 import io.element.android.libraries.mediaviewer.api.local.LocalMediaRenderer
 import io.element.android.libraries.preferences.api.store.VideoCompressionPreset
 import io.element.android.libraries.textcomposer.TextComposer
@@ -97,6 +99,7 @@ import kotlin.time.Duration.Companion.milliseconds
 fun AttachmentsPreviewView(
     state: AttachmentsPreviewState,
     localMediaRenderer: LocalMediaRenderer,
+    emojiPickerRenderer: EmojiPickerRenderer,
     modifier: Modifier = Modifier,
 ) {
     val canShowEditAction = when (state.sendActionState) {
@@ -149,9 +152,17 @@ fun AttachmentsPreviewView(
                 state.eventSink(AttachmentsPreviewEvent.UpdateImageCropRect(cropRect))
             },
             onToolSelect = { tool -> state.eventSink(AttachmentsPreviewEvent.SelectImageEditorTool(tool)) },
-            onPenColorSelect = { color -> state.eventSink(AttachmentsPreviewEvent.SelectPenColor(color)) },
+            onMarkupColorSelect = { color -> state.eventSink(AttachmentsPreviewEvent.SelectMarkupColor(color)) },
             onStrokeAdd = { stroke -> state.eventSink(AttachmentsPreviewEvent.AddMarkupStroke(stroke)) },
             onUndoStrokeClick = { state.eventSink(AttachmentsPreviewEvent.UndoMarkupStroke) },
+            onStickerPickerRequest = { picker -> state.eventSink(AttachmentsPreviewEvent.ShowStickerPicker(picker)) },
+            onEmojiStickerAdd = { unicode -> state.eventSink(AttachmentsPreviewEvent.AddEmojiSticker(unicode)) },
+            onTextStickerAdd = { text -> state.eventSink(AttachmentsPreviewEvent.AddTextSticker(text)) },
+            onStickerChange = { sticker -> state.eventSink(AttachmentsPreviewEvent.UpdateSticker(sticker)) },
+            onStickerSelect = { id -> state.eventSink(AttachmentsPreviewEvent.SelectSticker(id)) },
+            onStickerRemove = { id -> state.eventSink(AttachmentsPreviewEvent.RemoveSticker(id)) },
+            emojiPickerState = state.emojiPickerState,
+            emojiPickerRenderer = emojiPickerRenderer,
             onRotateClick = { state.eventSink(AttachmentsPreviewEvent.RotateImageToTheLeft) },
             onFlipHorizontallyClick = { state.eventSink(AttachmentsPreviewEvent.FlipImageHorizontally) },
             onFlipVerticallyClick = { state.eventSink(AttachmentsPreviewEvent.FlipImageVertically) },
@@ -561,6 +572,7 @@ internal fun AttachmentsPreviewViewPreview(@PreviewParameter(AttachmentsPreviewS
     AttachmentsPreviewView(
         state = state,
         localMediaRenderer = SampleMediaRenderer(),
+        emojiPickerRenderer = NoOpEmojiPickerRenderer,
     )
 }
 
@@ -570,6 +582,7 @@ internal fun AttachmentsPreviewGalleryViewPreview() = ElementPreviewDark {
     AttachmentsPreviewView(
         state = anAttachmentsPreviewGalleryState(),
         localMediaRenderer = SampleMediaRenderer(),
+        emojiPickerRenderer = NoOpEmojiPickerRenderer,
     )
 }
 

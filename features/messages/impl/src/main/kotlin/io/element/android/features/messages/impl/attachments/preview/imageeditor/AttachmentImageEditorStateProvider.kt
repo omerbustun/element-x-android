@@ -92,7 +92,15 @@ open class AttachmentImageEditorStateProvider : PreviewParameterProvider<Attachm
                     strokes = persistentListOf(aMarkupStroke()),
                 ),
                 activeTool = ImageEditorTool.Pen,
-                penColor = MarkupColor.Red,
+                markupColor = MarkupColor.Red,
+            ),
+            // Sticker tool, with an emoji and a piece of text, the emoji selected
+            anAttachmentImageEditorState(
+                edits = AttachmentImageEdits(
+                    stickers = persistentListOf(anEmojiSticker(), aTextSticker()),
+                ),
+                activeTool = ImageEditorTool.Sticker,
+                selectedStickerId = 1L,
             ),
         )
 }
@@ -104,14 +112,33 @@ internal fun anAttachmentImageEditorState(
     ),
     edits: AttachmentImageEdits = AttachmentImageEdits(),
     activeTool: ImageEditorTool = ImageEditorTool.Crop,
-    penColor: MarkupColor = MarkupColor.White,
+    markupColor: MarkupColor = MarkupColor.White,
+    selectedStickerId: Long? = null,
+    stickerPicker: StickerPicker = StickerPicker.None,
     previewDebug: Boolean = false,
 ) = AttachmentImageEditorState(
     localMedia = localMedia,
     edits = edits,
     activeTool = activeTool,
-    penColor = penColor,
+    markupColor = markupColor,
+    selectedStickerId = selectedStickerId,
+    stickerPicker = stickerPicker,
     previewDebug = previewDebug,
+)
+
+internal fun anEmojiSticker() = MarkupSticker(
+    id = 1L,
+    content = MarkupStickerContent.Emoji("🚀"),
+    center = NormalizedPoint(x = 0.35f, y = 0.4f),
+    relativeFontSize = MarkupSticker.EMOJI_RELATIVE_FONT_SIZE,
+)
+
+internal fun aTextSticker() = MarkupSticker(
+    id = 2L,
+    content = MarkupStickerContent.Text("Look here", MarkupColor.Yellow),
+    center = NormalizedPoint(x = 0.6f, y = 0.65f),
+    relativeFontSize = MarkupSticker.TEXT_RELATIVE_FONT_SIZE,
+    rotationDegrees = -12f,
 )
 
 internal fun aMarkupStroke(color: MarkupColor = MarkupColor.Red) = MarkupStroke(

@@ -14,6 +14,7 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -29,6 +30,10 @@ import io.element.android.features.messages.impl.attachments.preview.imageeditor
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.AttachmentImageEdits
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.ImageEditorTool
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.MarkupColor
+import io.element.android.features.messages.impl.attachments.preview.imageeditor.MarkupSticker
+import io.element.android.features.messages.impl.attachments.preview.imageeditor.MarkupStickerContent
+import io.element.android.features.messages.impl.attachments.preview.imageeditor.NormalizedPoint
+import io.element.android.features.messages.impl.attachments.preview.imageeditor.StickerPicker
 import io.element.android.features.messages.impl.attachments.video.MediaOptimizationSelectorPresenter
 import io.element.android.features.messages.impl.attachments.video.MediaOptimizationSelectorState
 import io.element.android.features.messages.impl.attachments.video.VideoCompressionPresetSelector
@@ -41,6 +46,8 @@ import io.element.android.libraries.core.coroutine.firstInstanceOf
 import io.element.android.libraries.core.extensions.runCatchingExceptions
 import io.element.android.libraries.core.mimetype.MimeTypes.isMimeTypeVideo
 import io.element.android.libraries.di.annotations.SessionCoroutineScope
+import io.element.android.libraries.emoji.api.picker.EmojiPickerPresenter
+import io.element.android.libraries.emoji.api.recentemojis.GetRecentEmojis
 import io.element.android.libraries.matrix.api.core.EventId
 import io.element.android.libraries.matrix.api.permalink.PermalinkBuilder
 import io.element.android.libraries.matrix.api.timeline.Timeline
@@ -72,12 +79,16 @@ class AttachmentsPreviewPresenter(
     private val permalinkBuilder: PermalinkBuilder,
     private val temporaryUriDeleter: TemporaryUriDeleter,
     private val attachmentImageEditor: AttachmentImageEditor,
+    emojiPickerPresenterFactory: EmojiPickerPresenter.Factory,
+    getRecentEmojis: GetRecentEmojis,
     private val mediaOptimizationSelectorPresenterFactory: MediaOptimizationSelectorPresenter.Factory,
     private val videoCompressionPresetSelector: VideoCompressionPresetSelector,
     @SessionCoroutineScope private val sessionCoroutineScope: CoroutineScope,
     private val dispatchers: CoroutineDispatchers,
     private val mediaOptimizationConfigProvider: MediaOptimizationConfigProvider,
 ) : Presenter<AttachmentsPreviewState> {
+    private val emojiPickerPresenter = emojiPickerPresenterFactory.create(getRecentEmojis)
+
     @AssistedFactory
     interface Factory {
         fun create(
@@ -104,6 +115,8 @@ class AttachmentsPreviewPresenter(
         }
         var canEditImage by remember { mutableStateOf(false) }
         var imageEditorState by remember { mutableStateOf<AttachmentImageEditorState?>(null) }
+        var lastStickerId by remember { mutableLongStateOf(0L) }
+        val emojiPickerState = emojiPickerPresenter.present()
         var isApplyingImageEdits by remember { mutableStateOf(false) }
         var displayImageEditError by remember { mutableStateOf(false) }
         var editedTempFiles by remember { mutableStateOf<Map<Int, File>>(emptyMap()) }
@@ -324,7 +337,9 @@ class AttachmentsPreviewPresenter(
                             localMedia = currentLocalMedia,
                             edits = attachmentsAndEdits.get(currentIndex).edits,
                             activeTool = ImageEditorTool.Crop,
-                            penColor = MarkupColor.White,
+                            markupColor = MarkupColor.White,
+                            selectedStickerId = null,
+                            stickerPicker = StickerPicker.None,
                             previewDebug = false,
                         )
                     }
@@ -342,9 +357,9 @@ class AttachmentsPreviewPresenter(
                     val pendingState = imageEditorState ?: return
                     imageEditorState = pendingState.copy(activeTool = event.tool)
                 }
-                is AttachmentsPreviewEvent.SelectPenColor -> {
+                is AttachmentsPreviewEvent.SelectMarkupColor -> {
                     val pendingState = imageEditorState ?: return
-                    imageEditorState = pendingState.copy(penColor = event.color)
+                    imageEditorState = pendingState.copy(markupColor = event.color)
                 }
                 is AttachmentsPreviewEvent.AddMarkupStroke -> {
                     val pendingState = imageEditorState ?: return
@@ -356,6 +371,58 @@ class AttachmentsPreviewPresenter(
                     val pendingState = imageEditorState ?: return
                     imageEditorState = pendingState.copy(
                         edits = pendingState.edits.removeLastStroke()
+                    )
+                }
+                is AttachmentsPreviewEvent.ShowStickerPicker -> {
+                    val pendingState = imageEditorState ?: return
+                    imageEditorState = pendingState.copy(stickerPicker = event.picker)
+                }
+                is AttachmentsPreviewEvent.AddEmojiSticker -> {
+                    val pendingState = imageEditorState ?: return
+                    val sticker = newSticker(
+                        id = ++lastStickerId,
+                        content = MarkupStickerContent.Emoji(event.unicode),
+                        relativeFontSize = MarkupSticker.EMOJI_RELATIVE_FONT_SIZE,
+                    )
+                    imageEditorState = pendingState.copy(
+                        edits = pendingState.edits.addSticker(sticker),
+                        selectedStickerId = sticker.id,
+                        stickerPicker = StickerPicker.None,
+                    )
+                }
+                is AttachmentsPreviewEvent.AddTextSticker -> {
+                    val pendingState = imageEditorState ?: return
+                    val text = event.text.trim()
+                    if (text.isEmpty()) {
+                        imageEditorState = pendingState.copy(stickerPicker = StickerPicker.None)
+                        return
+                    }
+                    val sticker = newSticker(
+                        id = ++lastStickerId,
+                        content = MarkupStickerContent.Text(text, pendingState.markupColor),
+                        relativeFontSize = MarkupSticker.TEXT_RELATIVE_FONT_SIZE,
+                    )
+                    imageEditorState = pendingState.copy(
+                        edits = pendingState.edits.addSticker(sticker),
+                        selectedStickerId = sticker.id,
+                        stickerPicker = StickerPicker.None,
+                    )
+                }
+                is AttachmentsPreviewEvent.UpdateSticker -> {
+                    val pendingState = imageEditorState ?: return
+                    imageEditorState = pendingState.copy(
+                        edits = pendingState.edits.updateSticker(event.sticker)
+                    )
+                }
+                is AttachmentsPreviewEvent.SelectSticker -> {
+                    val pendingState = imageEditorState ?: return
+                    imageEditorState = pendingState.copy(selectedStickerId = event.id)
+                }
+                is AttachmentsPreviewEvent.RemoveSticker -> {
+                    val pendingState = imageEditorState ?: return
+                    imageEditorState = pendingState.copy(
+                        edits = pendingState.edits.removeSticker(event.id),
+                        selectedStickerId = pendingState.selectedStickerId.takeIf { it != event.id },
                     )
                 }
                 AttachmentsPreviewEvent.RotateImageToTheLeft -> {
@@ -440,6 +507,7 @@ class AttachmentsPreviewPresenter(
         return AttachmentsPreviewState(
             attachments = editedAttachments,
             imageEditorState = imageEditorState,
+            emojiPickerState = emojiPickerState,
             canEditImage = canEditImage,
             isApplyingImageEdits = isApplyingImageEdits,
             displayImageEditError = displayImageEditError,
@@ -585,3 +653,17 @@ class AttachmentsPreviewPresenter(
         }
     )
 }
+
+/**
+ * Creates a sticker in the middle of the image, ready for the user to drag into place.
+ */
+private fun newSticker(
+    id: Long,
+    content: MarkupStickerContent,
+    relativeFontSize: Float,
+) = MarkupSticker(
+    id = id,
+    content = content,
+    center = NormalizedPoint(x = 0.5f, y = 0.5f),
+    relativeFontSize = relativeFontSize,
+)

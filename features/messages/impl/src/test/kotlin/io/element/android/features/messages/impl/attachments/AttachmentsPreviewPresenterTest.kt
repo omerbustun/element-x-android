@@ -30,6 +30,8 @@ import io.element.android.features.messages.test.attachments.video.FakeMediaOpti
 import io.element.android.libraries.androidutils.file.TemporaryUriDeleter
 import io.element.android.libraries.architecture.AsyncData
 import io.element.android.libraries.core.mimetype.MimeTypes
+import io.element.android.libraries.emoji.api.recentemojis.EmptyGetRecentEmojis
+import io.element.android.libraries.emoji.test.fakeEmojiPickerPresenterFactory
 import io.element.android.libraries.matrix.api.core.EventId
 import io.element.android.libraries.matrix.api.media.AudioInfo
 import io.element.android.libraries.matrix.api.media.FileInfo
@@ -1001,6 +1003,8 @@ class AttachmentsPreviewPresenterTest : RobolectricTest() {
             timelineMode = timelineMode,
             inReplyToEventId = null,
             mediaOptimizationConfigProvider = mediaOptimizationConfigProvider,
+            emojiPickerPresenterFactory = fakeEmojiPickerPresenterFactory(),
+            getRecentEmojis = EmptyGetRecentEmojis,
         )
     }
 

@@ -18,4 +18,7 @@
     <string name="screen_image_edition_a11y_pen_colour_white">"White"</string>
     <string name="screen_image_edition_a11y_pen_colour_yellow">"Yellow"</string>
     <string name="screen_image_edition_a11y_selected">"Selected"</string>
+    <string name="screen_image_edition_a11y_sticker_tool">"Add emojis and text to the image"</string>
+    <string name="screen_image_edition_a11y_add_emoji">"Add emoji"</string>
+    <string name="screen_image_edition_a11y_add_text">"Add text"</string>
 </resources>

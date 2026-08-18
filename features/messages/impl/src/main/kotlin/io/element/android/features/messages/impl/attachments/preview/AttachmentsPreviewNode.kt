@@ -26,6 +26,7 @@ import io.element.android.features.messages.impl.attachments.Attachment
 import io.element.android.libraries.architecture.NodeInputs
 import io.element.android.libraries.architecture.inputs
 import io.element.android.libraries.di.RoomScope
+import io.element.android.libraries.emoji.api.picker.EmojiPickerRenderer
 import io.element.android.libraries.matrix.api.core.EventId
 import io.element.android.libraries.matrix.api.core.SessionId
 import io.element.android.libraries.matrix.api.timeline.Timeline
@@ -39,6 +40,7 @@ class AttachmentsPreviewNode(
     @Assisted plugins: List<Plugin>,
     presenterFactory: AttachmentsPreviewPresenter.Factory,
     private val localMediaRenderer: LocalMediaRenderer,
+    private val emojiPickerRenderer: EmojiPickerRenderer,
     private val sessionId: SessionId,
     private val enterpriseService: EnterpriseService,
 ) : Node(buildContext, plugins = plugins) {
@@ -73,6 +75,7 @@ class AttachmentsPreviewNode(
             AttachmentsPreviewView(
                 state = state,
                 localMediaRenderer = localMediaRenderer,
+                emojiPickerRenderer = emojiPickerRenderer,
                 modifier = modifier
             )
         }

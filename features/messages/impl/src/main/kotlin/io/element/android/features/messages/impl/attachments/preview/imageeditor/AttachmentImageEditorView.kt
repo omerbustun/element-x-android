@@ -13,6 +13,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -22,16 +24,21 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.LocalTextStyle
+import androidx.compose.material3.SheetValue
+import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -42,6 +49,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -61,9 +69,12 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
@@ -72,20 +83,28 @@ import io.element.android.compound.theme.ElementTheme
 import io.element.android.compound.tokens.generated.CompoundIcons
 import io.element.android.features.messages.impl.R
 import io.element.android.libraries.designsystem.components.button.BackButton
+import io.element.android.libraries.designsystem.components.dialogs.TextFieldDialog
 import io.element.android.libraries.designsystem.preview.ElementPreviewDark
 import io.element.android.libraries.designsystem.text.toPx
 import io.element.android.libraries.designsystem.theme.components.Icon
 import io.element.android.libraries.designsystem.theme.components.IconButton
+import io.element.android.libraries.designsystem.theme.components.ModalBottomSheet
 import io.element.android.libraries.designsystem.theme.components.Scaffold
 import io.element.android.libraries.designsystem.theme.components.Text
 import io.element.android.libraries.designsystem.theme.components.TextButton
 import io.element.android.libraries.designsystem.theme.components.TopAppBar
+import io.element.android.libraries.designsystem.theme.components.hide
 import io.element.android.libraries.designsystem.utils.CommonDrawables
+import io.element.android.libraries.emoji.api.picker.EmojiPickerRenderer
+import io.element.android.libraries.emoji.api.picker.EmojiPickerState
+import io.element.android.libraries.emoji.api.picker.NoOpEmojiPickerRenderer
 import io.element.android.libraries.ui.strings.CommonStrings
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlin.math.min
+import kotlin.math.roundToInt
 
 private val minHandleTouchRadius = 16.dp
 private val maxHandleTouchRadius = 56.dp
@@ -99,9 +118,17 @@ fun AttachmentImageEditorView(
     state: AttachmentImageEditorState,
     onCropRectChange: (NormalizedCropRect) -> Unit,
     onToolSelect: (ImageEditorTool) -> Unit,
-    onPenColorSelect: (MarkupColor) -> Unit,
+    onMarkupColorSelect: (MarkupColor) -> Unit,
     onStrokeAdd: (MarkupStroke) -> Unit,
     onUndoStrokeClick: () -> Unit,
+    onStickerPickerRequest: (StickerPicker) -> Unit,
+    onEmojiStickerAdd: (String) -> Unit,
+    onTextStickerAdd: (String) -> Unit,
+    onStickerChange: (MarkupSticker) -> Unit,
+    onStickerSelect: (Long?) -> Unit,
+    onStickerRemove: (Long) -> Unit,
+    emojiPickerState: EmojiPickerState,
+    emojiPickerRenderer: EmojiPickerRenderer,
     onRotateClick: () -> Unit,
     onFlipHorizontallyClick: () -> Unit,
     onFlipVerticallyClick: () -> Unit,
@@ -163,6 +190,9 @@ fun AttachmentImageEditorView(
                     state = state,
                     onCropRectChange = onCropRectChange,
                     onStrokeAdd = onStrokeAdd,
+                    onStickerChange = onStickerChange,
+                    onStickerSelect = onStickerSelect,
+                    onStickerRemove = onStickerRemove,
                 )
             }
             Column(
@@ -172,10 +202,10 @@ fun AttachmentImageEditorView(
                     .navigationBarsPadding()
                     .padding(start = 20.dp, top = 18.dp, end = 20.dp, bottom = 18.dp),
             ) {
-                if (state.activeTool == ImageEditorTool.Pen) {
-                    PenColorPicker(
-                        selectedColor = state.penColor,
-                        onPenColorSelect = onPenColorSelect,
+                if (state.activeTool != ImageEditorTool.Crop) {
+                    MarkupColorPicker(
+                        selectedColor = state.markupColor,
+                        onMarkupColorSelect = onMarkupColorSelect,
                     )
                 }
                 Row(
@@ -251,6 +281,20 @@ fun AttachmentImageEditorView(
                                     )
                                 }
                             }
+                            ImageEditorTool.Sticker -> {
+                                IconButton(onClick = { onStickerPickerRequest(StickerPicker.Emoji) }) {
+                                    Icon(
+                                        imageVector = CompoundIcons.Reaction(),
+                                        contentDescription = stringResource(R.string.screen_image_edition_a11y_add_emoji),
+                                    )
+                                }
+                                IconButton(onClick = { onStickerPickerRequest(StickerPicker.Text) }) {
+                                    Icon(
+                                        imageVector = CompoundIcons.TextFormatting(),
+                                        contentDescription = stringResource(R.string.screen_image_edition_a11y_add_text),
+                                    )
+                                }
+                            }
                         }
                     }
                     Box(
@@ -271,6 +315,50 @@ fun AttachmentImageEditorView(
             }
         }
     }
+
+    when (state.stickerPicker) {
+        StickerPicker.None -> Unit
+        StickerPicker.Emoji -> EmojiStickerBottomSheet(
+            emojiPickerState = emojiPickerState,
+            emojiPickerRenderer = emojiPickerRenderer,
+            onSelectEmoji = onEmojiStickerAdd,
+            onDismiss = { onStickerPickerRequest(StickerPicker.None) },
+        )
+        StickerPicker.Text -> TextFieldDialog(
+            title = stringResource(R.string.screen_image_edition_a11y_add_text),
+            value = "",
+            placeholder = null,
+            onSubmit = onTextStickerAdd,
+            onDismissRequest = { onStickerPickerRequest(StickerPicker.None) },
+            maxLines = 3,
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EmojiStickerBottomSheet(
+    emojiPickerState: EmojiPickerState,
+    emojiPickerRenderer: EmojiPickerRenderer,
+    onSelectEmoji: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden)
+    val coroutineScope = rememberCoroutineScope()
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        scrollable = false,
+    ) {
+        emojiPickerRenderer.Render(
+            state = emojiPickerState,
+            onSelectEmoji = { emoji ->
+                sheetState.hide(coroutineScope) { onSelectEmoji(emoji.unicode) }
+            },
+            selectedEmojis = persistentSetOf(),
+            modifier = Modifier.fillMaxSize(),
+        )
+    }
 }
 
 @Composable
@@ -286,6 +374,7 @@ private fun ToolPicker(
             val label = when (tool) {
                 ImageEditorTool.Crop -> stringResource(R.string.screen_image_edition_a11y_crop_tool)
                 ImageEditorTool.Pen -> stringResource(R.string.screen_image_edition_a11y_pen_tool)
+                ImageEditorTool.Sticker -> stringResource(R.string.screen_image_edition_a11y_sticker_tool)
             }
             IconButton(
                 onClick = { onToolSelect(tool) },
@@ -300,6 +389,7 @@ private fun ToolPicker(
                     imageVector = when (tool) {
                         ImageEditorTool.Crop -> CompoundIcons.Crop()
                         ImageEditorTool.Pen -> CompoundIcons.Edit()
+                        ImageEditorTool.Sticker -> CompoundIcons.Sticker()
                     },
                     contentDescription = null,
                     tint = if (isSelected) ElementTheme.colors.iconAccentPrimary else ElementTheme.colors.iconSecondary,
@@ -310,9 +400,9 @@ private fun ToolPicker(
 }
 
 @Composable
-private fun PenColorPicker(
+private fun MarkupColorPicker(
     selectedColor: MarkupColor,
-    onPenColorSelect: (MarkupColor) -> Unit,
+    onMarkupColorSelect: (MarkupColor) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val selectedStateDescription = stringResource(R.string.screen_image_edition_a11y_selected)
@@ -329,7 +419,7 @@ private fun PenColorPicker(
                 modifier = Modifier
                     .size(32.dp)
                     .clip(CircleShape)
-                    .clickable { onPenColorSelect(color) }
+                    .clickable { onMarkupColorSelect(color) }
                     .clearAndSetSemantics {
                         contentDescription = label
                         if (isSelected) {
@@ -370,6 +460,9 @@ private fun BoxScope.ImageEditorCanvas(
     state: AttachmentImageEditorState,
     onCropRectChange: (NormalizedCropRect) -> Unit,
     onStrokeAdd: (MarkupStroke) -> Unit,
+    onStickerChange: (MarkupSticker) -> Unit,
+    onStickerSelect: (Long?) -> Unit,
+    onStickerRemove: (Long) -> Unit,
 ) {
     var imageSize by remember(state.localMedia.uri) { mutableStateOf(IntSize.Zero) }
     val rotationQuarterTurns = state.edits.normalizedRotationQuarterTurns
@@ -471,7 +564,7 @@ private fun BoxScope.ImageEditorCanvas(
         )
         var dragTarget by remember { mutableStateOf<CropDragTarget?>(null) }
         val latestCropRect by rememberUpdatedState(state.edits.cropRect)
-        val latestPenColor by rememberUpdatedState(state.penColor)
+        val latestPenColor by rememberUpdatedState(state.markupColor)
         val latestImageRect by rememberUpdatedState(imageRect)
         var strokeInProgress by remember { mutableStateOf(persistentListOf<NormalizedPoint>().toImmutableList()) }
         val drawGuidelines = dragTarget == CropDragTarget.Move || state.previewDebug
@@ -507,6 +600,10 @@ private fun BoxScope.ImageEditorCanvas(
                     )
                 }
             }
+            ImageEditorTool.Sticker -> Modifier.pointerInput(state.activeTool) {
+                // A tap on the image itself, rather than on a sticker, clears the selection.
+                detectTapGestures { onStickerSelect(null) }
+            }
             ImageEditorTool.Pen -> Modifier.pointerInput(state.activeTool) {
                 detectDragGestures(
                     onDragStart = { offset ->
@@ -538,7 +635,16 @@ private fun BoxScope.ImageEditorCanvas(
                 imageSize = DpSize(displayedWidthDp, displayedHeightDp),
                 strokes = state.edits.strokes,
                 strokeInProgress = strokeInProgress,
-                penColor = state.penColor,
+                markupColor = state.markupColor,
+            )
+            StickerLayer(
+                imageSize = DpSize(displayedWidthDp, displayedHeightDp),
+                stickers = state.edits.stickers,
+                selectedStickerId = state.selectedStickerId,
+                isInteractive = state.activeTool == ImageEditorTool.Sticker,
+                onStickerChange = onStickerChange,
+                onStickerSelect = onStickerSelect,
+                onStickerRemove = onStickerRemove,
             )
             CropOverlay(
                 imageSize = DpSize(displayedWidthDp, displayedHeightDp),
@@ -553,6 +659,140 @@ private fun BoxScope.ImageEditorCanvas(
 }
 
 /**
+ * Lays the stickers out on top of the image. They can be dragged, pinched and rotated while the
+ * sticker tool is selected.
+ */
+@Composable
+private fun StickerLayer(
+    imageSize: DpSize,
+    stickers: ImmutableList<MarkupSticker>,
+    selectedStickerId: Long?,
+    isInteractive: Boolean,
+    onStickerChange: (MarkupSticker) -> Unit,
+    onStickerSelect: (Long?) -> Unit,
+    onStickerRemove: (Long) -> Unit,
+) {
+    val density = LocalDensity.current
+    val widthPx = with(density) { imageSize.width.toPx() }
+    val heightPx = with(density) { imageSize.height.toPx() }
+    Box(
+        modifier = Modifier.size(imageSize.width, imageSize.height),
+        contentAlignment = Alignment.Center,
+    ) {
+        for (sticker in stickers) {
+            StickerItem(
+                sticker = sticker,
+                containerWidthPx = widthPx,
+                containerHeightPx = heightPx,
+                smallestSideDp = minOf(imageSize.width, imageSize.height),
+                isSelected = selectedStickerId == sticker.id,
+                isInteractive = isInteractive,
+                onStickerChange = onStickerChange,
+                onStickerSelect = onStickerSelect,
+                onStickerRemove = onStickerRemove,
+            )
+        }
+    }
+}
+
+@Composable
+private fun BoxScope.StickerItem(
+    sticker: MarkupSticker,
+    containerWidthPx: Float,
+    containerHeightPx: Float,
+    smallestSideDp: Dp,
+    isSelected: Boolean,
+    isInteractive: Boolean,
+    onStickerChange: (MarkupSticker) -> Unit,
+    onStickerSelect: (Long?) -> Unit,
+    onStickerRemove: (Long) -> Unit,
+) {
+    val latestSticker by rememberUpdatedState(sticker)
+    val isSelectedNow by rememberUpdatedState(isSelected)
+    val fontSize = with(LocalDensity.current) {
+        (smallestSideDp * sticker.relativeFontSize * sticker.scale).toSp()
+    }
+    Box(
+        modifier = Modifier
+            .align(Alignment.Center)
+            .offset {
+                IntOffset(
+                    x = ((sticker.center.x - 0.5f) * containerWidthPx).roundToInt(),
+                    y = ((sticker.center.y - 0.5f) * containerHeightPx).roundToInt(),
+                )
+            }
+            // The gestures sit outside the rotation, so that a drag moves the sticker across the
+            // screen rather than along its own, rotated, axes.
+            .then(
+                if (isInteractive) {
+                    Modifier
+                        .pointerInput(sticker.id) {
+                            detectTapGestures { onStickerSelect(latestSticker.id) }
+                        }
+                        .pointerInput(sticker.id) {
+                            detectTransformGestures { _, pan, zoom, rotation ->
+                                val current = latestSticker
+                                if (!isSelectedNow) {
+                                    onStickerSelect(current.id)
+                                }
+                                onStickerChange(
+                                    current.copy(
+                                        center = NormalizedPoint(
+                                            x = (current.center.x + pan.x / containerWidthPx).coerceIn(0f, 1f),
+                                            y = (current.center.y + pan.y / containerHeightPx).coerceIn(0f, 1f),
+                                        ),
+                                        scale = (current.scale * zoom).coerceIn(MarkupSticker.MIN_SCALE, MarkupSticker.MAX_SCALE),
+                                        rotationDegrees = current.rotationDegrees + rotation,
+                                    )
+                                )
+                            }
+                        }
+                } else {
+                    Modifier
+                }
+            )
+            .graphicsLayer { rotationZ = sticker.rotationDegrees },
+    ) {
+        Text(
+            text = sticker.text,
+            color = sticker.color?.value ?: Color.White,
+            softWrap = false,
+            textAlign = TextAlign.Center,
+            style = LocalTextStyle.current.copy(
+                fontSize = fontSize,
+                // Keep light stickers legible on light images, matching the shadow drawn on export.
+                shadow = Shadow(
+                    color = Color.Black.copy(alpha = 0.35f),
+                    offset = Offset(0f, fontSize.value / 32f),
+                    blurRadius = fontSize.value / 12f,
+                ),
+            ),
+            modifier = Modifier
+                .padding(4.dp)
+                .then(
+                    if (isSelected) {
+                        Modifier.border(1.dp, ElementTheme.colors.borderInteractivePrimary)
+                    } else {
+                        Modifier
+                    }
+                ),
+        )
+        if (isSelected && isInteractive) {
+            IconButton(
+                onClick = { onStickerRemove(sticker.id) },
+                modifier = Modifier.align(Alignment.TopStart),
+            ) {
+                Icon(
+                    imageVector = CompoundIcons.Close(),
+                    contentDescription = stringResource(CommonStrings.action_remove),
+                    tint = ElementTheme.colors.iconPrimary,
+                )
+            }
+        }
+    }
+}
+
+/**
  * Draws the strokes the user has already made, plus the one currently being drawn.
  */
 @Composable
@@ -560,7 +800,7 @@ private fun MarkupOverlay(
     imageSize: DpSize,
     strokes: ImmutableList<MarkupStroke>,
     strokeInProgress: ImmutableList<NormalizedPoint>,
-    penColor: MarkupColor,
+    markupColor: MarkupColor,
 ) {
     Canvas(
         modifier = Modifier.size(imageSize.width, imageSize.height)
@@ -569,7 +809,7 @@ private fun MarkupOverlay(
         for (stroke in strokes) {
             drawMarkupStroke(points = stroke.points, color = stroke.color.value, strokeWidth = strokeWidth)
         }
-        drawMarkupStroke(points = strokeInProgress, color = penColor.value, strokeWidth = strokeWidth)
+        drawMarkupStroke(points = strokeInProgress, color = markupColor.value, strokeWidth = strokeWidth)
     }
 }
 
@@ -911,9 +1151,17 @@ internal fun AttachmentImageEditorViewPreview(
         state = state,
         onCropRectChange = {},
         onToolSelect = {},
-        onPenColorSelect = {},
+        onMarkupColorSelect = {},
         onStrokeAdd = {},
         onUndoStrokeClick = {},
+        onStickerPickerRequest = {},
+        onEmojiStickerAdd = {},
+        onTextStickerAdd = {},
+        onStickerChange = {},
+        onStickerSelect = {},
+        onStickerRemove = {},
+        emojiPickerState = PreviewEmojiPickerState,
+        emojiPickerRenderer = NoOpEmojiPickerRenderer,
         onRotateClick = {},
         onFlipHorizontallyClick = {},
         onFlipVerticallyClick = {},
@@ -921,4 +1169,11 @@ internal fun AttachmentImageEditorViewPreview(
         onCancelClick = {},
         onDoneClick = {},
     )
+}
+
+/**
+ * The picker is never opened in a preview, so it only needs to exist.
+ */
+private object PreviewEmojiPickerState : EmojiPickerState {
+    override val isReady = false
 }

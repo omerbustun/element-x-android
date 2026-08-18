@@ -15,6 +15,9 @@ import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Path
 import android.net.Uri
+import android.text.Layout
+import android.text.StaticLayout
+import android.text.TextPaint
 import androidx.compose.ui.graphics.toArgb
 import androidx.exifinterface.media.ExifInterface
 import dev.zacsweers.metro.AppScope
@@ -35,6 +38,7 @@ import java.io.File
 import kotlin.math.roundToInt
 
 private const val EDITED_MEDIA_DIR_NAME = "edited-media"
+private const val STICKER_SHADOW_COLOR = 0x59000000
 
 interface AttachmentImageEditor {
     suspend fun canEdit(localMedia: LocalMedia): Boolean
@@ -98,7 +102,7 @@ class DefaultAttachmentImageEditor(
 
             // Draw the markup before cropping, so that strokes outside of the crop area are trimmed
             // along with the image, exactly as they appear behind the crop overlay.
-            val markedUpBitmap = transformedBitmap.drawMarkup(edits.strokes)
+            val markedUpBitmap = transformedBitmap.drawMarkup(edits.strokes, edits.stickers)
             if (markedUpBitmap !== transformedBitmap) {
                 transformedBitmap.recycle()
             }
@@ -172,8 +176,8 @@ private fun Bitmap.applyEdits(edits: AttachmentImageEdits): Bitmap {
     return Bitmap.createBitmap(this, 0, 0, width, height, matrix, true)
 }
 
-internal fun Bitmap.drawMarkup(strokes: List<MarkupStroke>): Bitmap {
-    if (strokes.isEmpty()) {
+internal fun Bitmap.drawMarkup(strokes: List<MarkupStroke>, stickers: List<MarkupSticker>): Bitmap {
+    if (strokes.isEmpty() && stickers.isEmpty()) {
         return this
     }
     val target = copy(Bitmap.Config.ARGB_8888, true) ?: return this
@@ -206,7 +210,33 @@ internal fun Bitmap.drawMarkup(strokes: List<MarkupStroke>): Bitmap {
         }
         canvas.drawPath(path, paint)
     }
+    canvas.drawStickers(stickers, target.width, target.height)
     return target
+}
+
+private fun Canvas.drawStickers(stickers: List<MarkupSticker>, width: Int, height: Int) {
+    if (stickers.isEmpty()) return
+    val smallestSide = minOf(width, height)
+    val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG)
+    for (sticker in stickers) {
+        val fontSize = smallestSide * sticker.relativeFontSize * sticker.scale
+        if (fontSize <= 0f || sticker.text.isEmpty()) continue
+        textPaint.textSize = fontSize
+        textPaint.color = sticker.color?.value?.toArgb() ?: android.graphics.Color.WHITE
+        // Keep light stickers legible on light images, matching the shadow drawn on screen.
+        textPaint.setShadowLayer(fontSize / 12f, 0f, fontSize / 32f, STICKER_SHADOW_COLOR)
+        // A width the text will never reach, so that it only breaks on the newlines the user typed.
+        val layout = StaticLayout.Builder
+            .obtain(sticker.text, 0, sticker.text.length, textPaint, smallestSide * 8)
+            .setAlignment(Layout.Alignment.ALIGN_CENTER)
+            .build()
+        save()
+        translate(sticker.center.x * width, sticker.center.y * height)
+        rotate(sticker.rotationDegrees)
+        translate(-layout.width / 2f, -layout.height / 2f)
+        layout.draw(this)
+        restore()
+    }
 }
 
 private data class PixelCropRect(

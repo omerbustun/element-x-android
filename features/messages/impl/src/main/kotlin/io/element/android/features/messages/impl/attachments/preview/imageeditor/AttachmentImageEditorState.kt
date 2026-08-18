@@ -22,7 +22,10 @@ data class AttachmentImageEditorState(
     val localMedia: LocalMedia,
     val edits: AttachmentImageEdits,
     val activeTool: ImageEditorTool,
-    val penColor: MarkupColor,
+    /** The colour used both by the pen and by new text stickers. */
+    val markupColor: MarkupColor,
+    val selectedStickerId: Long?,
+    val stickerPicker: StickerPicker,
     // For preview only
     val previewDebug: Boolean,
 )
@@ -33,6 +36,16 @@ data class AttachmentImageEditorState(
 enum class ImageEditorTool {
     Crop,
     Pen,
+    Sticker,
+}
+
+/**
+ * The picker currently shown on top of the editor, used to create a new sticker.
+ */
+enum class StickerPicker {
+    None,
+    Emoji,
+    Text,
 }
 
 @Immutable
@@ -42,6 +55,7 @@ data class AttachmentImageEdits(
     val isFlippedHorizontally: Boolean = false,
     val isFlippedVertically: Boolean = false,
     val strokes: ImmutableList<MarkupStroke> = persistentListOf(),
+    val stickers: ImmutableList<MarkupSticker> = persistentListOf(),
 ) {
     val normalizedRotationQuarterTurns: Int
         get() = rotationQuarterTurns % 4
@@ -54,7 +68,8 @@ data class AttachmentImageEdits(
             normalizedRotationQuarterTurns != 0 ||
             isFlippedHorizontally ||
             isFlippedVertically ||
-            strokes.isNotEmpty()
+            strokes.isNotEmpty() ||
+            stickers.isNotEmpty()
 
     fun rotateAntiClockwise(): AttachmentImageEdits {
         return copy(
@@ -62,6 +77,7 @@ data class AttachmentImageEdits(
             // Also update the crop rect and the markup to keep the same selected area
             cropRect = cropRect.rotateAntiClockwise(),
             strokes = strokes.map { it.rotateAntiClockwise() }.toImmutableList(),
+            stickers = stickers.map { it.rotateAntiClockwise() }.toImmutableList(),
         )
     }
 
@@ -71,6 +87,7 @@ data class AttachmentImageEdits(
             // Also update the crop rect and the markup to keep the same selected area
             cropRect = cropRect.flipHorizontally(),
             strokes = strokes.map { it.flipHorizontally() }.toImmutableList(),
+            stickers = stickers.map { it.flipHorizontally() }.toImmutableList(),
         )
     }
 
@@ -80,12 +97,21 @@ data class AttachmentImageEdits(
             // Also update the crop rect and the markup to keep the same selected area
             cropRect = cropRect.flipVertically(),
             strokes = strokes.map { it.flipVertically() }.toImmutableList(),
+            stickers = stickers.map { it.flipVertically() }.toImmutableList(),
         )
     }
 
     fun addStroke(stroke: MarkupStroke) = copy(strokes = (strokes + stroke).toImmutableList())
 
     fun removeLastStroke() = copy(strokes = strokes.dropLast(1).toImmutableList())
+
+    fun addSticker(sticker: MarkupSticker) = copy(stickers = (stickers + sticker).toImmutableList())
+
+    fun updateSticker(sticker: MarkupSticker) = copy(
+        stickers = stickers.map { if (it.id == sticker.id) sticker else it }.toImmutableList(),
+    )
+
+    fun removeSticker(id: Long) = copy(stickers = stickers.filterNot { it.id == id }.toImmutableList())
 }
 
 @Immutable

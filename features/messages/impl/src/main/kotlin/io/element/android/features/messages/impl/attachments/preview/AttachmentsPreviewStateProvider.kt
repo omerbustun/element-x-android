@@ -17,6 +17,7 @@ import io.element.android.features.messages.impl.attachments.video.MediaOptimiza
 import io.element.android.features.messages.impl.attachments.video.VideoUploadEstimation
 import io.element.android.libraries.architecture.AsyncData
 import io.element.android.libraries.core.mimetype.MimeTypes
+import io.element.android.libraries.emoji.api.picker.EmojiPickerState
 import io.element.android.libraries.matrix.api.media.ImageInfo
 import io.element.android.libraries.mediaupload.api.MediaUploadInfo
 import io.element.android.libraries.mediaviewer.api.MediaInfo
@@ -80,6 +81,7 @@ fun anAttachmentsPreviewState(
         ),
     ),
     imageEditorState = imageEditorState,
+    emojiPickerState = PreviewEmojiPickerState,
     canEditImage = true,
     isApplyingImageEdits = false,
     displayImageEditError = false,
@@ -113,6 +115,7 @@ fun anAttachmentsPreviewGalleryState(
     canEditImage = false,
     isApplyingImageEdits = false,
     displayImageEditError = false,
+    emojiPickerState = PreviewEmojiPickerState,
     sendActionState = sendActionState,
     textEditorState = textEditorState,
     mediaOptimizationSelectorState = mediaOptimizationSelectorState,
@@ -170,3 +173,10 @@ internal fun aVideoSizeEstimationList(): AsyncData<ImmutableList<VideoUploadEsti
         ),
     )
 )
+
+/**
+ * The picker is never opened in a preview, so it only needs to exist.
+ */
+private object PreviewEmojiPickerState : EmojiPickerState {
+    override val isReady = false
+}

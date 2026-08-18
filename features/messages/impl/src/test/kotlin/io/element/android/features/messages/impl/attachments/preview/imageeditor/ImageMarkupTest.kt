@@ -106,6 +106,103 @@ class ImageMarkupTest {
         assertThat(flipped.y).isWithin(TOLERANCE).of(0.5f)
     }
 
+    @Test
+    fun `rotating a sticker moves its centre and turns it with the image`() {
+        val sticker = aSticker(center = NormalizedPoint(x = 0.25f, y = 0.5f), rotationDegrees = 10f)
+
+        val result = sticker.rotateAntiClockwise()
+
+        assertThat(result.center.x).isWithin(TOLERANCE).of(0.5f)
+        assertThat(result.center.y).isWithin(TOLERANCE).of(0.75f)
+        assertThat(result.rotationDegrees).isWithin(TOLERANCE).of(-80f)
+    }
+
+    @Test
+    fun `flipping a sticker mirrors its centre and its angle`() {
+        val sticker = aSticker(center = NormalizedPoint(x = 0.2f, y = 0.4f), rotationDegrees = 30f)
+
+        val flippedHorizontally = sticker.flipHorizontally()
+        assertThat(flippedHorizontally.center.x).isWithin(TOLERANCE).of(0.8f)
+        assertThat(flippedHorizontally.center.y).isWithin(TOLERANCE).of(0.4f)
+        assertThat(flippedHorizontally.rotationDegrees).isWithin(TOLERANCE).of(-30f)
+
+        val flippedVertically = sticker.flipVertically()
+        assertThat(flippedVertically.center.x).isWithin(TOLERANCE).of(0.2f)
+        assertThat(flippedVertically.center.y).isWithin(TOLERANCE).of(0.6f)
+    }
+
+    @Test
+    fun `a sticker exposes its text and colour by content`() {
+        val emoji = aSticker(content = MarkupStickerContent.Emoji("🚀"))
+        assertThat(emoji.text).isEqualTo("🚀")
+        assertThat(emoji.color).isNull()
+
+        val text = aSticker(content = MarkupStickerContent.Text("Hello", MarkupColor.Blue))
+        assertThat(text.text).isEqualTo("Hello")
+        assertThat(text.color).isEqualTo(MarkupColor.Blue)
+    }
+
+    @Test
+    fun `adding a sticker marks the edits as changed`() {
+        val sut = AttachmentImageEdits()
+        assertThat(sut.hasChanges).isFalse()
+
+        val result = sut.addSticker(aSticker())
+        assertThat(result.stickers).hasSize(1)
+        assertThat(result.hasChanges).isTrue()
+    }
+
+    @Test
+    fun `updating a sticker only replaces the matching one`() {
+        val first = aSticker(id = 1L)
+        val second = aSticker(id = 2L)
+        val sut = AttachmentImageEdits().addSticker(first).addSticker(second)
+
+        val result = sut.updateSticker(second.copy(scale = 3f))
+
+        assertThat(result.stickers).hasSize(2)
+        assertThat(result.stickers[0].scale).isWithin(TOLERANCE).of(first.scale)
+        assertThat(result.stickers[1].scale).isWithin(TOLERANCE).of(3f)
+    }
+
+    @Test
+    fun `removing a sticker leaves the others alone`() {
+        val sut = AttachmentImageEdits()
+            .addSticker(aSticker(id = 1L))
+            .addSticker(aSticker(id = 2L))
+
+        val result = sut.removeSticker(1L)
+
+        assertThat(result.stickers.map { it.id }).containsExactly(2L)
+        assertThat(result.removeSticker(2L).hasChanges).isFalse()
+    }
+
+    @Test
+    fun `transforming the edits also transforms the stickers`() {
+        val sut = AttachmentImageEdits()
+            .addSticker(aSticker(center = NormalizedPoint(x = 0.25f, y = 0.5f)))
+
+        val rotated = sut.rotateAntiClockwise().stickers[0]
+        assertThat(rotated.center.x).isWithin(TOLERANCE).of(0.5f)
+        assertThat(rotated.center.y).isWithin(TOLERANCE).of(0.75f)
+
+        val flipped = sut.flipVertically().stickers[0]
+        assertThat(flipped.center.y).isWithin(TOLERANCE).of(0.5f)
+    }
+
+    private fun aSticker(
+        id: Long = 1L,
+        content: MarkupStickerContent = MarkupStickerContent.Emoji("🚀"),
+        center: NormalizedPoint = NormalizedPoint(x = 0.5f, y = 0.5f),
+        rotationDegrees: Float = 0f,
+    ) = MarkupSticker(
+        id = id,
+        content = content,
+        center = center,
+        relativeFontSize = MarkupSticker.EMOJI_RELATIVE_FONT_SIZE,
+        rotationDegrees = rotationDegrees,
+    )
+
     companion object {
         private const val TOLERANCE = 0.0001f
     }

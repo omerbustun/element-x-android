@@ -52,6 +52,63 @@ data class MarkupStroke(
 }
 
 /**
+ * A piece of content the user has placed on top of the image: an emoji, or some text.
+ */
+@Immutable
+sealed interface MarkupStickerContent {
+    data class Emoji(val unicode: String) : MarkupStickerContent
+    data class Text(val text: String, val color: MarkupColor) : MarkupStickerContent
+}
+
+/**
+ * A sticker placed on the image. Like a stroke, its position is normalized against the image so
+ * that it stays on the same part of the image when that is rotated, flipped or cropped.
+ */
+@Immutable
+data class MarkupSticker(
+    val id: Long,
+    val content: MarkupStickerContent,
+    val center: NormalizedPoint,
+    /** The base font size, as a fraction of the smallest side of the image. */
+    val relativeFontSize: Float,
+    val scale: Float = 1f,
+    val rotationDegrees: Float = 0f,
+) {
+    val text: String
+        get() = when (content) {
+            is MarkupStickerContent.Emoji -> content.unicode
+            is MarkupStickerContent.Text -> content.text
+        }
+
+    val color: MarkupColor?
+        get() = (content as? MarkupStickerContent.Text)?.color
+
+    fun rotateAntiClockwise() = copy(
+        center = center.rotateAntiClockwise(),
+        rotationDegrees = rotationDegrees - 90f,
+    )
+
+    // The glyphs themselves are deliberately not mirrored, which would leave text unreadable,
+    // so only the position and the angle follow the flip.
+    fun flipHorizontally() = copy(
+        center = center.flipHorizontally(),
+        rotationDegrees = -rotationDegrees,
+    )
+
+    fun flipVertically() = copy(
+        center = center.flipVertically(),
+        rotationDegrees = -rotationDegrees,
+    )
+
+    companion object {
+        const val EMOJI_RELATIVE_FONT_SIZE = 0.2f
+        const val TEXT_RELATIVE_FONT_SIZE = 0.09f
+        const val MIN_SCALE = 0.2f
+        const val MAX_SCALE = 8f
+    }
+}
+
+/**
  * The colours the pen can draw with.
  */
 enum class MarkupColor(val value: Color) {
