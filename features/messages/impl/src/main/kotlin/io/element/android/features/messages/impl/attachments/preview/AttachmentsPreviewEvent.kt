@@ -8,7 +8,8 @@
 
 package io.element.android.features.messages.impl.attachments.preview
 
-import io.element.android.features.messages.impl.attachments.preview.imageeditor.ImageEditorTool
+import io.element.android.features.messages.impl.attachments.preview.imageeditor.DrawTool
+import io.element.android.features.messages.impl.attachments.preview.imageeditor.ImageEditorEntryPoint
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.MarkupColor
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.MarkupShape
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.MarkupShapeKind
@@ -22,7 +23,7 @@ sealed interface AttachmentsPreviewEvent {
     data object SendAttachment : AttachmentsPreviewEvent
     data object CancelAndDismiss : AttachmentsPreviewEvent
     data object CancelAndClearSendState : AttachmentsPreviewEvent
-    data object OpenImageEditor : AttachmentsPreviewEvent
+    data class OpenImageEditor(val entryPoint: ImageEditorEntryPoint) : AttachmentsPreviewEvent
     data object CloseImageEditor : AttachmentsPreviewEvent
     data object RotateImageToTheLeft : AttachmentsPreviewEvent
     data object FlipImageHorizontally : AttachmentsPreviewEvent
@@ -30,7 +31,7 @@ sealed interface AttachmentsPreviewEvent {
     data object ApplyImageEdits : AttachmentsPreviewEvent
     data object ResetImageEdits : AttachmentsPreviewEvent
     data class UpdateImageCropRect(val cropRect: NormalizedCropRect) : AttachmentsPreviewEvent
-    data class SelectImageEditorTool(val tool: ImageEditorTool) : AttachmentsPreviewEvent
+    data class SelectDrawTool(val tool: DrawTool) : AttachmentsPreviewEvent
     data class SelectMarkupColor(val color: MarkupColor) : AttachmentsPreviewEvent
     data class AddMarkupStroke(val stroke: MarkupStroke) : AttachmentsPreviewEvent
     data class SelectMarkupShapeKind(val kind: MarkupShapeKind) : AttachmentsPreviewEvent

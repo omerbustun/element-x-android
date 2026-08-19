@@ -50,6 +50,7 @@ import io.element.android.features.messages.impl.R
 import io.element.android.features.messages.impl.attachments.Attachment
 import io.element.android.features.messages.impl.attachments.preview.error.sendAttachmentError
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.AttachmentImageEditorView
+import io.element.android.features.messages.impl.attachments.preview.imageeditor.ImageEditorEntryPoint
 import io.element.android.features.messages.impl.attachments.video.MediaOptimizationSelectorEvent
 import io.element.android.features.messages.impl.attachments.video.MediaOptimizationSelectorState
 import io.element.android.features.messages.impl.attachments.video.VideoUploadEstimation
@@ -121,8 +122,8 @@ fun AttachmentsPreviewView(
         state.eventSink(AttachmentsPreviewEvent.CancelAndClearSendState)
     }
 
-    fun postOpenImageEditor() {
-        state.eventSink(AttachmentsPreviewEvent.OpenImageEditor)
+    fun postOpenImageEditor(entryPoint: ImageEditorEntryPoint) {
+        state.eventSink(AttachmentsPreviewEvent.OpenImageEditor(entryPoint))
     }
 
     fun postCloseImageEditor() {
@@ -151,7 +152,7 @@ fun AttachmentsPreviewView(
             onCropRectChange = { cropRect ->
                 state.eventSink(AttachmentsPreviewEvent.UpdateImageCropRect(cropRect))
             },
-            onToolSelect = { tool -> state.eventSink(AttachmentsPreviewEvent.SelectImageEditorTool(tool)) },
+            onDrawToolSelect = { tool -> state.eventSink(AttachmentsPreviewEvent.SelectDrawTool(tool)) },
             onMarkupColorSelect = { color -> state.eventSink(AttachmentsPreviewEvent.SelectMarkupColor(color)) },
             onStrokeAdd = { stroke -> state.eventSink(AttachmentsPreviewEvent.AddMarkupStroke(stroke)) },
             onShapeKindSelect = { kind -> state.eventSink(AttachmentsPreviewEvent.SelectMarkupShapeKind(kind)) },
@@ -194,13 +195,27 @@ fun AttachmentsPreviewView(
                     },
                     actions = {
                         if (state.canEditImage && canShowEditAction) {
-                            IconButton(
-                                onClick = ::postOpenImageEditor,
-                            ) {
-                                Icon(
-                                    imageVector = CompoundIcons.Crop(),
-                                    contentDescription = stringResource(CommonStrings.action_edit),
-                                )
+                            for (entryPoint in ImageEditorEntryPoint.entries) {
+                                IconButton(
+                                    onClick = { postOpenImageEditor(entryPoint) },
+                                ) {
+                                    Icon(
+                                        imageVector = when (entryPoint) {
+                                            ImageEditorEntryPoint.Crop -> CompoundIcons.Crop()
+                                            ImageEditorEntryPoint.Emoji -> CompoundIcons.Reaction()
+                                            ImageEditorEntryPoint.Text -> CompoundIcons.TextFormatting()
+                                            ImageEditorEntryPoint.Draw -> CompoundIcons.Edit()
+                                        },
+                                        contentDescription = stringResource(
+                                            when (entryPoint) {
+                                                ImageEditorEntryPoint.Crop -> R.string.screen_image_edition_a11y_crop_tool
+                                                ImageEditorEntryPoint.Emoji -> R.string.screen_image_edition_a11y_add_emoji
+                                                ImageEditorEntryPoint.Text -> R.string.screen_image_edition_a11y_add_text
+                                                ImageEditorEntryPoint.Draw -> R.string.screen_image_edition_a11y_pen_tool
+                                            }
+                                        ),
+                                    )
+                                }
                             }
                         }
                     }

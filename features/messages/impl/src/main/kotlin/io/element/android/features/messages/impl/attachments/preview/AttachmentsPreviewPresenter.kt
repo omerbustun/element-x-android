@@ -28,8 +28,8 @@ import io.element.android.features.messages.impl.attachments.Attachment
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.AttachmentImageEditor
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.AttachmentImageEditorState
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.AttachmentImageEdits
+import io.element.android.features.messages.impl.attachments.preview.imageeditor.DrawTool
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.ERASER_RELATIVE_RADIUS
-import io.element.android.features.messages.impl.attachments.preview.imageeditor.ImageEditorTool
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.MarkupColor
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.MarkupShapeKind
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.MarkupSticker
@@ -328,7 +328,7 @@ class AttachmentsPreviewPresenter(
                         SendActionState.Idle
                     }
                 }
-                AttachmentsPreviewEvent.OpenImageEditor -> {
+                is AttachmentsPreviewEvent.OpenImageEditor -> {
                     val currentLocalMedia = (attachments.getOrNull(currentIndex) as? Attachment.Media)?.localMedia ?: return
                     val resolvedCanEditImage = canEditImage || currentLocalMedia.info.canEditImage()
                     if (resolvedCanEditImage) {
@@ -338,11 +338,12 @@ class AttachmentsPreviewPresenter(
                         imageEditorState = AttachmentImageEditorState(
                             localMedia = currentLocalMedia,
                             edits = attachmentsAndEdits.get(currentIndex).edits,
-                            activeTool = ImageEditorTool.Crop,
+                            activeTool = event.entryPoint.tool,
+                            drawTool = DrawTool.Pen,
                             markupColor = MarkupColor.White,
                             shapeKind = MarkupShapeKind.Arrow,
                             selectedStickerId = null,
-                            stickerPicker = StickerPicker.None,
+                            stickerPicker = event.entryPoint.stickerPicker,
                             previewDebug = false,
                         )
                     }
@@ -356,18 +357,27 @@ class AttachmentsPreviewPresenter(
                         edits = pendingState.edits.copy(cropRect = event.cropRect)
                     )
                 }
-                is AttachmentsPreviewEvent.SelectImageEditorTool -> {
+                is AttachmentsPreviewEvent.SelectDrawTool -> {
                     val pendingState = imageEditorState ?: return
-                    imageEditorState = pendingState.copy(
-                        activeTool = event.tool,
-                        // A sticker can only be handled by the sticker tool, so leaving it
-                        // selected would strand its remove badge on top of the image.
-                        selectedStickerId = pendingState.selectedStickerId.takeIf { event.tool == ImageEditorTool.Sticker },
-                    )
+                    imageEditorState = pendingState.copy(drawTool = event.tool)
                 }
                 is AttachmentsPreviewEvent.SelectMarkupColor -> {
                     val pendingState = imageEditorState ?: return
-                    imageEditorState = pendingState.copy(markupColor = event.color)
+                    // Recolour the selected text as well, so that a colour can be picked after
+                    // the text has been typed rather than only before it.
+                    val selectedText = pendingState.edits.stickers
+                        .firstOrNull { it.id == pendingState.selectedStickerId }
+                        ?.takeIf { it.content is MarkupStickerContent.Text }
+                    imageEditorState = pendingState.copy(
+                        markupColor = event.color,
+                        edits = if (selectedText == null) {
+                            pendingState.edits
+                        } else {
+                            pendingState.edits.updateSticker(
+                                selectedText.copy(content = MarkupStickerContent.Text(selectedText.text, event.color))
+                            )
+                        },
+                    )
                 }
                 is AttachmentsPreviewEvent.AddMarkupStroke -> {
                     val pendingState = imageEditorState ?: return
@@ -399,8 +409,8 @@ class AttachmentsPreviewPresenter(
                     val pendingState = imageEditorState ?: return
                     // Undo removes the last thing the selected tool drew.
                     imageEditorState = pendingState.copy(
-                        edits = when (pendingState.activeTool) {
-                            ImageEditorTool.Shape -> pendingState.edits.removeLastShape()
+                        edits = when (pendingState.drawTool) {
+                            DrawTool.Shape -> pendingState.edits.removeLastShape()
                             else -> pendingState.edits.removeLastStroke()
                         }
                     )

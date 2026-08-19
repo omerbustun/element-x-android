@@ -22,6 +22,7 @@ data class AttachmentImageEditorState(
     val localMedia: LocalMedia,
     val edits: AttachmentImageEdits,
     val activeTool: ImageEditorTool,
+    val drawTool: DrawTool,
     /** The colour used by the pen, the highlighter, the shapes and new text stickers. */
     val markupColor: MarkupColor,
     val shapeKind: MarkupShapeKind,
@@ -29,22 +30,58 @@ data class AttachmentImageEditorState(
     val stickerPicker: StickerPicker,
     // For preview only
     val previewDebug: Boolean,
-)
+) {
+    /** Whether the palette is shown: the drawing tools take a colour, and so does text. */
+    val showsMarkupColorPicker: Boolean
+        get() = when (activeTool) {
+            ImageEditorTool.Crop -> false
+            ImageEditorTool.Sticker -> true
+            ImageEditorTool.Draw -> drawTool != DrawTool.Eraser
+        }
+}
+
+/**
+ * The way the editor was opened from the attachment preview, which decides both the tool it
+ * starts on and, for a sticker, the picker it opens with.
+ */
+enum class ImageEditorEntryPoint {
+    Crop,
+    Emoji,
+    Text,
+    Draw;
+
+    val tool: ImageEditorTool
+        get() = when (this) {
+            Crop -> ImageEditorTool.Crop
+            Emoji, Text -> ImageEditorTool.Sticker
+            Draw -> ImageEditorTool.Draw
+        }
+
+    val stickerPicker: StickerPicker
+        get() = when (this) {
+            Emoji -> StickerPicker.Emoji
+            Text -> StickerPicker.Text
+            Crop, Draw -> StickerPicker.None
+        }
+}
 
 /**
  * The tool the editor is currently driven by. Only one can handle drags at a time.
  */
 enum class ImageEditorTool {
     Crop,
+    Sticker,
+    Draw,
+}
+
+/**
+ * What a drag leaves behind whilst the drawing tool is selected.
+ */
+enum class DrawTool {
     Pen,
     Highlighter,
     Shape,
-    Eraser,
-    Sticker;
-
-    /** Whether what this tool draws takes the colour selected in the palette. */
-    val usesMarkupColor: Boolean
-        get() = this == Pen || this == Highlighter || this == Shape || this == Sticker
+    Eraser;
 
     /** Whether a drag with this tool draws a freehand stroke, and of which kind. */
     val strokeKind: MarkupStrokeKind?

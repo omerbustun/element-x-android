@@ -19,7 +19,9 @@ import io.element.android.features.messages.impl.attachments.preview.OnDoneListe
 import io.element.android.features.messages.impl.attachments.preview.SendActionState
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.AttachmentImageEditor
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.AttachmentImageEdits
+import io.element.android.features.messages.impl.attachments.preview.imageeditor.DrawTool
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.EditedLocalMedia
+import io.element.android.features.messages.impl.attachments.preview.imageeditor.ImageEditorEntryPoint
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.ImageEditorTool
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.MarkupColor
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.MarkupShape
@@ -27,6 +29,7 @@ import io.element.android.features.messages.impl.attachments.preview.imageeditor
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.MarkupStroke
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.NormalizedCropRect
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.NormalizedPoint
+import io.element.android.features.messages.impl.attachments.preview.imageeditor.StickerPicker
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.assertIsSimilarTo
 import io.element.android.features.messages.impl.attachments.video.MediaOptimizationSelectorState
 import io.element.android.features.messages.impl.attachments.video.VideoCompressionPresetSelector
@@ -590,7 +593,7 @@ class AttachmentsPreviewPresenterTest : RobolectricTest() {
         presenter.test {
             skipItems(1)
             val initialState = awaitItem()
-            initialState.eventSink(AttachmentsPreviewEvent.OpenImageEditor)
+            initialState.eventSink(AttachmentsPreviewEvent.OpenImageEditor(ImageEditorEntryPoint.Crop))
             val editorState = awaitItem()
             assertThat(editorState.imageEditorState).isNotNull()
 
@@ -633,7 +636,7 @@ class AttachmentsPreviewPresenterTest : RobolectricTest() {
 
         presenter.test {
             val initialState = awaitItem()
-            initialState.eventSink(AttachmentsPreviewEvent.OpenImageEditor)
+            initialState.eventSink(AttachmentsPreviewEvent.OpenImageEditor(ImageEditorEntryPoint.Crop))
             val editorState = consumeItemsUntilPredicate { it.imageEditorState != null }.last()
 
             editorState.eventSink(AttachmentsPreviewEvent.UpdateImageCropRect(cropRect))
@@ -649,7 +652,7 @@ class AttachmentsPreviewPresenterTest : RobolectricTest() {
             val appliedState = consumeItemsUntilPredicate { !it.isApplyingImageEdits && it.imageEditorState == null }.last()
             assertThat((appliedState.attachments.first() as Attachment.Media).localMedia.uri).isEqualTo(editedUri)
 
-            appliedState.eventSink(AttachmentsPreviewEvent.OpenImageEditor)
+            appliedState.eventSink(AttachmentsPreviewEvent.OpenImageEditor(ImageEditorEntryPoint.Crop))
             val reopenedState = consumeItemsUntilPredicate { it.imageEditorState != null }.last()
             assertThat(reopenedState.imageEditorState!!.localMedia.uri).isEqualTo(originalLocalMedia.uri)
             val rotatedCropRect = NormalizedCropRect(
@@ -678,7 +681,7 @@ class AttachmentsPreviewPresenterTest : RobolectricTest() {
 
         presenter.test {
             val initialState = awaitItem()
-            initialState.eventSink(AttachmentsPreviewEvent.OpenImageEditor)
+            initialState.eventSink(AttachmentsPreviewEvent.OpenImageEditor(ImageEditorEntryPoint.Crop))
             val editorState = consumeItemsUntilPredicate { it.imageEditorState != null }.last()
 
             editorState.eventSink(AttachmentsPreviewEvent.FlipImageHorizontally)
@@ -697,12 +700,12 @@ class AttachmentsPreviewPresenterTest : RobolectricTest() {
 
         presenter.test {
             val initialState = awaitItem()
-            initialState.eventSink(AttachmentsPreviewEvent.OpenImageEditor)
+            initialState.eventSink(AttachmentsPreviewEvent.OpenImageEditor(ImageEditorEntryPoint.Draw))
             val editorState = consumeItemsUntilPredicate { it.imageEditorState != null }.last()
 
-            editorState.eventSink(AttachmentsPreviewEvent.SelectImageEditorTool(ImageEditorTool.Shape))
+            editorState.eventSink(AttachmentsPreviewEvent.SelectDrawTool(DrawTool.Shape))
             val shapeToolState = awaitItem()
-            assertThat(shapeToolState.imageEditorState?.activeTool).isEqualTo(ImageEditorTool.Shape)
+            assertThat(shapeToolState.imageEditorState?.drawTool).isEqualTo(DrawTool.Shape)
 
             shapeToolState.eventSink(AttachmentsPreviewEvent.SelectMarkupShapeKind(MarkupShapeKind.Ellipse))
             val ellipseState = awaitItem()
@@ -731,7 +734,7 @@ class AttachmentsPreviewPresenterTest : RobolectricTest() {
 
         presenter.test {
             val initialState = awaitItem()
-            initialState.eventSink(AttachmentsPreviewEvent.OpenImageEditor)
+            initialState.eventSink(AttachmentsPreviewEvent.OpenImageEditor(ImageEditorEntryPoint.Crop))
             val editorState = consumeItemsUntilPredicate { it.imageEditorState != null }.last()
 
             val stroke = MarkupStroke(
@@ -754,22 +757,25 @@ class AttachmentsPreviewPresenterTest : RobolectricTest() {
     }
 
     @Test
-    fun `present - leaving the sticker tool clears the selected sticker`() = runTest {
+    fun `present - each entry point opens the editor on its own tool`() = runTest {
         val presenter = createAttachmentsPreviewPresenter(displayMediaQualitySelectorViews = true)
 
         presenter.test {
             val initialState = awaitItem()
-            initialState.eventSink(AttachmentsPreviewEvent.OpenImageEditor)
-            val editorState = consumeItemsUntilPredicate { it.imageEditorState != null }.last()
 
-            editorState.eventSink(AttachmentsPreviewEvent.SelectImageEditorTool(ImageEditorTool.Sticker))
-            val stickerToolState = awaitItem()
-            stickerToolState.eventSink(AttachmentsPreviewEvent.AddEmojiSticker("🚀"))
-            val stickerState = consumeItemsUntilPredicate { it.imageEditorState?.selectedStickerId != null }.last()
+            initialState.eventSink(AttachmentsPreviewEvent.OpenImageEditor(ImageEditorEntryPoint.Emoji))
+            val emojiState = consumeItemsUntilPredicate { it.imageEditorState != null }.last()
+            assertThat(emojiState.imageEditorState?.activeTool).isEqualTo(ImageEditorTool.Sticker)
+            assertThat(emojiState.imageEditorState?.stickerPicker).isEqualTo(StickerPicker.Emoji)
 
-            stickerState.eventSink(AttachmentsPreviewEvent.SelectImageEditorTool(ImageEditorTool.Pen))
-            val penState = awaitItem()
-            assertThat(penState.imageEditorState?.selectedStickerId).isNull()
+            emojiState.eventSink(AttachmentsPreviewEvent.CloseImageEditor)
+            val closedState = consumeItemsUntilPredicate { it.imageEditorState == null }.last()
+
+            closedState.eventSink(AttachmentsPreviewEvent.OpenImageEditor(ImageEditorEntryPoint.Draw))
+            val drawState = consumeItemsUntilPredicate { it.imageEditorState != null }.last()
+            assertThat(drawState.imageEditorState?.activeTool).isEqualTo(ImageEditorTool.Draw)
+            assertThat(drawState.imageEditorState?.drawTool).isEqualTo(DrawTool.Pen)
+            assertThat(drawState.imageEditorState?.stickerPicker).isEqualTo(StickerPicker.None)
         }
     }
 
@@ -854,7 +860,7 @@ class AttachmentsPreviewPresenterTest : RobolectricTest() {
 
         presenter.test {
             val initialState = awaitItem()
-            initialState.eventSink(AttachmentsPreviewEvent.OpenImageEditor)
+            initialState.eventSink(AttachmentsPreviewEvent.OpenImageEditor(ImageEditorEntryPoint.Crop))
             val editorState = consumeItemsUntilPredicate { it.imageEditorState != null }.last()
 
             editorState.eventSink(AttachmentsPreviewEvent.ApplyImageEdits)
@@ -885,7 +891,7 @@ class AttachmentsPreviewPresenterTest : RobolectricTest() {
             val initialState = awaitItem()
             assertThat(initialState.canEditImage).isTrue()
 
-            initialState.eventSink(AttachmentsPreviewEvent.OpenImageEditor)
+            initialState.eventSink(AttachmentsPreviewEvent.OpenImageEditor(ImageEditorEntryPoint.Crop))
             val editorState = consumeItemsUntilPredicate { it.imageEditorState != null }.last()
             assertThat(editorState.imageEditorState).isNotNull()
         }
@@ -919,7 +925,7 @@ class AttachmentsPreviewPresenterTest : RobolectricTest() {
             val initialState = consumeItemsUntilPredicate { it.canEditImage }.last()
             assertThat(initialState.canEditImage).isTrue()
 
-            initialState.eventSink(AttachmentsPreviewEvent.OpenImageEditor)
+            initialState.eventSink(AttachmentsPreviewEvent.OpenImageEditor(ImageEditorEntryPoint.Crop))
             val editorState = consumeItemsUntilPredicate { it.imageEditorState != null }.last()
             assertThat(editorState.imageEditorState).isNotNull()
         }
@@ -1009,7 +1015,7 @@ class AttachmentsPreviewPresenterTest : RobolectricTest() {
 
         presenter.test {
             val initialState = awaitItem()
-            initialState.eventSink(AttachmentsPreviewEvent.OpenImageEditor)
+            initialState.eventSink(AttachmentsPreviewEvent.OpenImageEditor(ImageEditorEntryPoint.Crop))
             val editorState = consumeItemsUntilPredicate { it.imageEditorState != null }.last()
 
             editorState.eventSink(AttachmentsPreviewEvent.ApplyImageEdits)

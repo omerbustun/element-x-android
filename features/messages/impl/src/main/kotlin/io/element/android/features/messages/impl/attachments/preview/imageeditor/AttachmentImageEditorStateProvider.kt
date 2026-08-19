@@ -91,7 +91,7 @@ open class AttachmentImageEditorStateProvider : PreviewParameterProvider<Attachm
                 edits = AttachmentImageEdits(
                     strokes = persistentListOf(aMarkupStroke()),
                 ),
-                activeTool = ImageEditorTool.Pen,
+                activeTool = ImageEditorTool.Draw,
                 markupColor = MarkupColor.Red,
             ),
             // Highlighter, over a stroke already drawn with the pen
@@ -102,7 +102,8 @@ open class AttachmentImageEditorStateProvider : PreviewParameterProvider<Attachm
                         aMarkupStroke(color = MarkupColor.Yellow, kind = MarkupStrokeKind.Highlighter),
                     ),
                 ),
-                activeTool = ImageEditorTool.Highlighter,
+                activeTool = ImageEditorTool.Draw,
+                drawTool = DrawTool.Highlighter,
                 markupColor = MarkupColor.Yellow,
             ),
             // Shape tool, with one shape of each kind on the image
@@ -115,7 +116,8 @@ open class AttachmentImageEditorStateProvider : PreviewParameterProvider<Attachm
                         aMarkupShape(MarkupShapeKind.Ellipse, color = MarkupColor.Purple),
                     ),
                 ),
-                activeTool = ImageEditorTool.Shape,
+                activeTool = ImageEditorTool.Draw,
+                drawTool = DrawTool.Shape,
                 markupColor = MarkupColor.Red,
             ),
             // Eraser, with markup to rub out
@@ -124,7 +126,8 @@ open class AttachmentImageEditorStateProvider : PreviewParameterProvider<Attachm
                     strokes = persistentListOf(aMarkupStroke()),
                     shapes = persistentListOf(aMarkupShape(MarkupShapeKind.Ellipse)),
                 ),
-                activeTool = ImageEditorTool.Eraser,
+                activeTool = ImageEditorTool.Draw,
+                drawTool = DrawTool.Eraser,
             ),
             // Sticker tool, with an emoji and a piece of text, the emoji selected
             anAttachmentImageEditorState(
@@ -144,6 +147,7 @@ internal fun anAttachmentImageEditorState(
     ),
     edits: AttachmentImageEdits = AttachmentImageEdits(),
     activeTool: ImageEditorTool = ImageEditorTool.Crop,
+    drawTool: DrawTool = DrawTool.Pen,
     markupColor: MarkupColor = MarkupColor.White,
     shapeKind: MarkupShapeKind = MarkupShapeKind.Arrow,
     selectedStickerId: Long? = null,
@@ -153,6 +157,7 @@ internal fun anAttachmentImageEditorState(
     localMedia = localMedia,
     edits = edits,
     activeTool = activeTool,
+    drawTool = drawTool,
     markupColor = markupColor,
     shapeKind = shapeKind,
     selectedStickerId = selectedStickerId,
