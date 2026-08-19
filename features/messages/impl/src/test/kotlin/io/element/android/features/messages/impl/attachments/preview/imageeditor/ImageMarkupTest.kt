@@ -9,6 +9,7 @@ package io.element.android.features.messages.impl.attachments.preview.imageedito
 
 import com.google.common.truth.Truth.assertThat
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import org.junit.Test
 
 class ImageMarkupTest {
@@ -189,6 +190,188 @@ class ImageMarkupTest {
         val flipped = sut.flipVertically().stickers[0]
         assertThat(flipped.center.y).isWithin(TOLERANCE).of(0.5f)
     }
+
+    @Test
+    fun `a highlighter draws wider and more faintly than the pen`() {
+        assertThat(MarkupStrokeKind.Highlighter.relativeWidth).isGreaterThan(MarkupStrokeKind.Pen.relativeWidth)
+        assertThat(MarkupStrokeKind.Highlighter.alpha).isLessThan(MarkupStrokeKind.Pen.alpha)
+        assertThat(MarkupStrokeKind.Pen.alpha).isEqualTo(1f)
+    }
+
+    @Test
+    fun `a stroke keeps its kind through a rotation and a flip`() {
+        val stroke = aStroke(kind = MarkupStrokeKind.Highlighter)
+        assertThat(stroke.rotateAntiClockwise().kind).isEqualTo(MarkupStrokeKind.Highlighter)
+        assertThat(stroke.flipHorizontally().kind).isEqualTo(MarkupStrokeKind.Highlighter)
+        assertThat(stroke.flipVertically().kind).isEqualTo(MarkupStrokeKind.Highlighter)
+    }
+
+    @Test
+    fun `rotating a shape rotates both of its ends and keeps the colour`() {
+        val shape = MarkupShape(
+            kind = MarkupShapeKind.Arrow,
+            start = NormalizedPoint(x = 0f, y = 0f),
+            end = NormalizedPoint(x = 1f, y = 1f),
+            color = MarkupColor.Blue,
+        )
+        val result = shape.rotateAntiClockwise()
+        assertThat(result.kind).isEqualTo(MarkupShapeKind.Arrow)
+        assertThat(result.color).isEqualTo(MarkupColor.Blue)
+        assertThat(result.start).isEqualTo(NormalizedPoint(x = 0f, y = 1f))
+        assertThat(result.end).isEqualTo(NormalizedPoint(x = 1f, y = 0f))
+    }
+
+    @Test
+    fun `a line is drawn as the single run the drag traced`() {
+        val shape = aShape(MarkupShapeKind.Line)
+        val polylines = shape.polylines(width = 100f, height = 100f)
+        assertThat(polylines).hasSize(1)
+        assertThat(polylines[0]).hasSize(2)
+        assertThat(polylines[0][0].x).isWithin(TOLERANCE).of(20f)
+        assertThat(polylines[0][1].x).isWithin(TOLERANCE).of(80f)
+        assertThat(shape.ovalBounds(width = 100f, height = 100f)).isNull()
+    }
+
+    @Test
+    fun `an arrow adds a head at the end the drag finished on`() {
+        val polylines = aShape(MarkupShapeKind.Arrow).polylines(width = 100f, height = 100f)
+        assertThat(polylines).hasSize(2)
+        // Both barbs meet the shaft at the point the drag ended.
+        assertThat(polylines[1]).hasSize(3)
+        assertThat(polylines[1][1].x).isWithin(TOLERANCE).of(polylines[0][1].x)
+        assertThat(polylines[1][1].y).isWithin(TOLERANCE).of(polylines[0][1].y)
+    }
+
+    @Test
+    fun `a rectangle is drawn as a closed run around its bounds`() {
+        val polylines = aShape(MarkupShapeKind.Rectangle).polylines(width = 100f, height = 100f)
+        assertThat(polylines).hasSize(1)
+        assertThat(polylines[0]).hasSize(5)
+        assertThat(polylines[0].first()).isEqualTo(polylines[0].last())
+    }
+
+    @Test
+    fun `an ellipse is drawn from its bounds rather than from straight runs`() {
+        val shape = aShape(MarkupShapeKind.Ellipse)
+        assertThat(shape.polylines(width = 100f, height = 100f)).isEmpty()
+        val bounds = shape.ovalBounds(width = 100f, height = 100f)
+        assertThat(bounds).isNotNull()
+        assertThat(bounds!!.left).isWithin(TOLERANCE).of(20f)
+        assertThat(bounds.right).isWithin(TOLERANCE).of(80f)
+    }
+
+    @Test
+    fun `the bounds of a shape do not depend on the direction it was dragged in`() {
+        val forwards = aShape(MarkupShapeKind.Ellipse)
+        val backwards = forwards.copy(start = forwards.end, end = forwards.start)
+        assertThat(backwards.ovalBounds(width = 100f, height = 100f))
+            .isEqualTo(forwards.ovalBounds(width = 100f, height = 100f))
+    }
+
+    @Test
+    fun `the eraser rubs out only the markup it is dragged over`() {
+        val target = aStroke(points = listOf(NormalizedPoint(x = 0.1f, y = 0.1f)))
+        val other = aStroke(points = listOf(NormalizedPoint(x = 0.9f, y = 0.9f)))
+        val edits = AttachmentImageEdits(strokes = persistentListOf(target, other))
+
+        val result = edits.eraseAt(
+            point = NormalizedPoint(x = 0.11f, y = 0.11f),
+            radius = ERASER_RELATIVE_RADIUS,
+            aspectRatio = 1f,
+        )
+
+        assertThat(result.strokes).containsExactly(other)
+    }
+
+    @Test
+    fun `the eraser rubs out whole strokes rather than the part under it`() {
+        val stroke = aStroke(
+            points = listOf(
+                NormalizedPoint(x = 0.1f, y = 0.5f),
+                NormalizedPoint(x = 0.9f, y = 0.5f),
+            ),
+        )
+        val edits = AttachmentImageEdits(strokes = persistentListOf(stroke))
+
+        val result = edits.eraseAt(
+            point = NormalizedPoint(x = 0.5f, y = 0.5f),
+            radius = ERASER_RELATIVE_RADIUS,
+            aspectRatio = 1f,
+        )
+
+        assertThat(result.strokes).isEmpty()
+    }
+
+    @Test
+    fun `the eraser reaches the outline of a shape but not the space inside it`() {
+        val shape = MarkupShape(
+            kind = MarkupShapeKind.Rectangle,
+            start = NormalizedPoint(x = 0.2f, y = 0.2f),
+            end = NormalizedPoint(x = 0.8f, y = 0.8f),
+            color = MarkupColor.Red,
+        )
+        val edits = AttachmentImageEdits(shapes = persistentListOf(shape))
+
+        val insideTheShape = edits.eraseAt(
+            point = NormalizedPoint(x = 0.5f, y = 0.5f),
+            radius = ERASER_RELATIVE_RADIUS,
+            aspectRatio = 1f,
+        )
+        assertThat(insideTheShape.shapes).containsExactly(shape)
+
+        val onTheOutline = edits.eraseAt(
+            point = NormalizedPoint(x = 0.5f, y = 0.2f),
+            radius = ERASER_RELATIVE_RADIUS,
+            aspectRatio = 1f,
+        )
+        assertThat(onTheOutline.shapes).isEmpty()
+    }
+
+    @Test
+    fun `adding a shape marks the edits as changed`() {
+        val edits = AttachmentImageEdits()
+        assertThat(edits.hasChanges).isFalse()
+        val result = edits.addShape(aShape(MarkupShapeKind.Arrow))
+        assertThat(result.hasChanges).isTrue()
+        assertThat(result.shapes).hasSize(1)
+    }
+
+    @Test
+    fun `removing the last shape undoes a single shape at a time`() {
+        val first = aShape(MarkupShapeKind.Arrow)
+        val second = aShape(MarkupShapeKind.Line)
+        val edits = AttachmentImageEdits().addShape(first).addShape(second)
+
+        assertThat(edits.removeLastShape().shapes).containsExactly(first)
+        assertThat(edits.removeLastShape().removeLastShape().shapes).isEmpty()
+        assertThat(AttachmentImageEdits().removeLastShape().shapes).isEmpty()
+    }
+
+    @Test
+    fun `transforming the edits also transforms the shapes`() {
+        val shape = aShape(MarkupShapeKind.Arrow)
+        val edits = AttachmentImageEdits(shapes = persistentListOf(shape))
+
+        assertThat(edits.rotateAntiClockwise().shapes.single()).isEqualTo(shape.rotateAntiClockwise())
+        assertThat(edits.flipHorizontally().shapes.single()).isEqualTo(shape.flipHorizontally())
+        assertThat(edits.flipVertically().shapes.single()).isEqualTo(shape.flipVertically())
+    }
+
+    private fun aStroke(
+        points: List<NormalizedPoint> = listOf(
+            NormalizedPoint(x = 0.2f, y = 0.3f),
+            NormalizedPoint(x = 0.4f, y = 0.5f),
+        ),
+        color: MarkupColor = MarkupColor.Red,
+        kind: MarkupStrokeKind = MarkupStrokeKind.Pen,
+    ) = MarkupStroke(points = points.toImmutableList(), color = color, kind = kind)
+
+    private fun aShape(kind: MarkupShapeKind) = MarkupShape(
+        kind = kind,
+        start = NormalizedPoint(x = 0.2f, y = 0.2f),
+        end = NormalizedPoint(x = 0.8f, y = 0.6f),
+        color = MarkupColor.Red,
+    )
 
     private fun aSticker(
         id: Long = 1L,

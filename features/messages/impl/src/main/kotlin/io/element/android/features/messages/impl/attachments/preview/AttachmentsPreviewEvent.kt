@@ -10,9 +10,12 @@ package io.element.android.features.messages.impl.attachments.preview
 
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.ImageEditorTool
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.MarkupColor
+import io.element.android.features.messages.impl.attachments.preview.imageeditor.MarkupShape
+import io.element.android.features.messages.impl.attachments.preview.imageeditor.MarkupShapeKind
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.MarkupSticker
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.MarkupStroke
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.NormalizedCropRect
+import io.element.android.features.messages.impl.attachments.preview.imageeditor.NormalizedPoint
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.StickerPicker
 
 sealed interface AttachmentsPreviewEvent {
@@ -30,7 +33,10 @@ sealed interface AttachmentsPreviewEvent {
     data class SelectImageEditorTool(val tool: ImageEditorTool) : AttachmentsPreviewEvent
     data class SelectMarkupColor(val color: MarkupColor) : AttachmentsPreviewEvent
     data class AddMarkupStroke(val stroke: MarkupStroke) : AttachmentsPreviewEvent
-    data object UndoMarkupStroke : AttachmentsPreviewEvent
+    data class SelectMarkupShapeKind(val kind: MarkupShapeKind) : AttachmentsPreviewEvent
+    data class AddMarkupShape(val shape: MarkupShape) : AttachmentsPreviewEvent
+    data class EraseMarkup(val point: NormalizedPoint, val aspectRatio: Float) : AttachmentsPreviewEvent
+    data object UndoMarkup : AttachmentsPreviewEvent
     data class ShowStickerPicker(val picker: StickerPicker) : AttachmentsPreviewEvent
     data class AddEmojiSticker(val unicode: String) : AttachmentsPreviewEvent
     data class AddTextSticker(val text: String) : AttachmentsPreviewEvent

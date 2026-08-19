@@ -94,6 +94,38 @@ open class AttachmentImageEditorStateProvider : PreviewParameterProvider<Attachm
                 activeTool = ImageEditorTool.Pen,
                 markupColor = MarkupColor.Red,
             ),
+            // Highlighter, over a stroke already drawn with the pen
+            anAttachmentImageEditorState(
+                edits = AttachmentImageEdits(
+                    strokes = persistentListOf(
+                        aMarkupStroke(),
+                        aMarkupStroke(color = MarkupColor.Yellow, kind = MarkupStrokeKind.Highlighter),
+                    ),
+                ),
+                activeTool = ImageEditorTool.Highlighter,
+                markupColor = MarkupColor.Yellow,
+            ),
+            // Shape tool, with one shape of each kind on the image
+            anAttachmentImageEditorState(
+                edits = AttachmentImageEdits(
+                    shapes = persistentListOf(
+                        aMarkupShape(MarkupShapeKind.Arrow),
+                        aMarkupShape(MarkupShapeKind.Line, color = MarkupColor.Blue),
+                        aMarkupShape(MarkupShapeKind.Rectangle, color = MarkupColor.Green),
+                        aMarkupShape(MarkupShapeKind.Ellipse, color = MarkupColor.Purple),
+                    ),
+                ),
+                activeTool = ImageEditorTool.Shape,
+                markupColor = MarkupColor.Red,
+            ),
+            // Eraser, with markup to rub out
+            anAttachmentImageEditorState(
+                edits = AttachmentImageEdits(
+                    strokes = persistentListOf(aMarkupStroke()),
+                    shapes = persistentListOf(aMarkupShape(MarkupShapeKind.Ellipse)),
+                ),
+                activeTool = ImageEditorTool.Eraser,
+            ),
             // Sticker tool, with an emoji and a piece of text, the emoji selected
             anAttachmentImageEditorState(
                 edits = AttachmentImageEdits(
@@ -113,6 +145,7 @@ internal fun anAttachmentImageEditorState(
     edits: AttachmentImageEdits = AttachmentImageEdits(),
     activeTool: ImageEditorTool = ImageEditorTool.Crop,
     markupColor: MarkupColor = MarkupColor.White,
+    shapeKind: MarkupShapeKind = MarkupShapeKind.Arrow,
     selectedStickerId: Long? = null,
     stickerPicker: StickerPicker = StickerPicker.None,
     previewDebug: Boolean = false,
@@ -121,6 +154,7 @@ internal fun anAttachmentImageEditorState(
     edits = edits,
     activeTool = activeTool,
     markupColor = markupColor,
+    shapeKind = shapeKind,
     selectedStickerId = selectedStickerId,
     stickerPicker = stickerPicker,
     previewDebug = previewDebug,
@@ -141,11 +175,25 @@ internal fun aTextSticker() = MarkupSticker(
     rotationDegrees = -12f,
 )
 
-internal fun aMarkupStroke(color: MarkupColor = MarkupColor.Red) = MarkupStroke(
+internal fun aMarkupStroke(
+    color: MarkupColor = MarkupColor.Red,
+    kind: MarkupStrokeKind = MarkupStrokeKind.Pen,
+) = MarkupStroke(
     points = persistentListOf(
         NormalizedPoint(x = 0.2f, y = 0.3f),
         NormalizedPoint(x = 0.4f, y = 0.5f),
         NormalizedPoint(x = 0.7f, y = 0.35f),
     ),
+    color = color,
+    kind = kind,
+)
+
+internal fun aMarkupShape(
+    kind: MarkupShapeKind,
+    color: MarkupColor = MarkupColor.Red,
+) = MarkupShape(
+    kind = kind,
+    start = NormalizedPoint(x = 0.25f, y = 0.25f),
+    end = NormalizedPoint(x = 0.7f, y = 0.6f),
     color = color,
 )

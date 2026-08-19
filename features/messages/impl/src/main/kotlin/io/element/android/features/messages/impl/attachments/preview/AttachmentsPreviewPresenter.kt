@@ -28,8 +28,10 @@ import io.element.android.features.messages.impl.attachments.Attachment
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.AttachmentImageEditor
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.AttachmentImageEditorState
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.AttachmentImageEdits
+import io.element.android.features.messages.impl.attachments.preview.imageeditor.ERASER_RELATIVE_RADIUS
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.ImageEditorTool
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.MarkupColor
+import io.element.android.features.messages.impl.attachments.preview.imageeditor.MarkupShapeKind
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.MarkupSticker
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.MarkupStickerContent
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.NormalizedPoint
@@ -338,6 +340,7 @@ class AttachmentsPreviewPresenter(
                             edits = attachmentsAndEdits.get(currentIndex).edits,
                             activeTool = ImageEditorTool.Crop,
                             markupColor = MarkupColor.White,
+                            shapeKind = MarkupShapeKind.Arrow,
                             selectedStickerId = null,
                             stickerPicker = StickerPicker.None,
                             previewDebug = false,
@@ -355,7 +358,12 @@ class AttachmentsPreviewPresenter(
                 }
                 is AttachmentsPreviewEvent.SelectImageEditorTool -> {
                     val pendingState = imageEditorState ?: return
-                    imageEditorState = pendingState.copy(activeTool = event.tool)
+                    imageEditorState = pendingState.copy(
+                        activeTool = event.tool,
+                        // A sticker can only be handled by the sticker tool, so leaving it
+                        // selected would strand its remove badge on top of the image.
+                        selectedStickerId = pendingState.selectedStickerId.takeIf { event.tool == ImageEditorTool.Sticker },
+                    )
                 }
                 is AttachmentsPreviewEvent.SelectMarkupColor -> {
                     val pendingState = imageEditorState ?: return
@@ -367,10 +375,34 @@ class AttachmentsPreviewPresenter(
                         edits = pendingState.edits.addStroke(event.stroke)
                     )
                 }
-                AttachmentsPreviewEvent.UndoMarkupStroke -> {
+                is AttachmentsPreviewEvent.SelectMarkupShapeKind -> {
+                    val pendingState = imageEditorState ?: return
+                    imageEditorState = pendingState.copy(shapeKind = event.kind)
+                }
+                is AttachmentsPreviewEvent.AddMarkupShape -> {
                     val pendingState = imageEditorState ?: return
                     imageEditorState = pendingState.copy(
-                        edits = pendingState.edits.removeLastStroke()
+                        edits = pendingState.edits.addShape(event.shape)
+                    )
+                }
+                is AttachmentsPreviewEvent.EraseMarkup -> {
+                    val pendingState = imageEditorState ?: return
+                    imageEditorState = pendingState.copy(
+                        edits = pendingState.edits.eraseAt(
+                            point = event.point,
+                            radius = ERASER_RELATIVE_RADIUS,
+                            aspectRatio = event.aspectRatio,
+                        )
+                    )
+                }
+                AttachmentsPreviewEvent.UndoMarkup -> {
+                    val pendingState = imageEditorState ?: return
+                    // Undo removes the last thing the selected tool drew.
+                    imageEditorState = pendingState.copy(
+                        edits = when (pendingState.activeTool) {
+                            ImageEditorTool.Shape -> pendingState.edits.removeLastShape()
+                            else -> pendingState.edits.removeLastStroke()
+                        }
                     )
                 }
                 is AttachmentsPreviewEvent.ShowStickerPicker -> {

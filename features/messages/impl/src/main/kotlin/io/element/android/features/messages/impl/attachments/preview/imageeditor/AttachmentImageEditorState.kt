@@ -22,8 +22,9 @@ data class AttachmentImageEditorState(
     val localMedia: LocalMedia,
     val edits: AttachmentImageEdits,
     val activeTool: ImageEditorTool,
-    /** The colour used both by the pen and by new text stickers. */
+    /** The colour used by the pen, the highlighter, the shapes and new text stickers. */
     val markupColor: MarkupColor,
+    val shapeKind: MarkupShapeKind,
     val selectedStickerId: Long?,
     val stickerPicker: StickerPicker,
     // For preview only
@@ -36,7 +37,22 @@ data class AttachmentImageEditorState(
 enum class ImageEditorTool {
     Crop,
     Pen,
-    Sticker,
+    Highlighter,
+    Shape,
+    Eraser,
+    Sticker;
+
+    /** Whether what this tool draws takes the colour selected in the palette. */
+    val usesMarkupColor: Boolean
+        get() = this == Pen || this == Highlighter || this == Shape || this == Sticker
+
+    /** Whether a drag with this tool draws a freehand stroke, and of which kind. */
+    val strokeKind: MarkupStrokeKind?
+        get() = when (this) {
+            Pen -> MarkupStrokeKind.Pen
+            Highlighter -> MarkupStrokeKind.Highlighter
+            else -> null
+        }
 }
 
 /**
@@ -55,6 +71,7 @@ data class AttachmentImageEdits(
     val isFlippedHorizontally: Boolean = false,
     val isFlippedVertically: Boolean = false,
     val strokes: ImmutableList<MarkupStroke> = persistentListOf(),
+    val shapes: ImmutableList<MarkupShape> = persistentListOf(),
     val stickers: ImmutableList<MarkupSticker> = persistentListOf(),
 ) {
     val normalizedRotationQuarterTurns: Int
@@ -69,6 +86,7 @@ data class AttachmentImageEdits(
             isFlippedHorizontally ||
             isFlippedVertically ||
             strokes.isNotEmpty() ||
+            shapes.isNotEmpty() ||
             stickers.isNotEmpty()
 
     fun rotateAntiClockwise(): AttachmentImageEdits {
@@ -77,6 +95,7 @@ data class AttachmentImageEdits(
             // Also update the crop rect and the markup to keep the same selected area
             cropRect = cropRect.rotateAntiClockwise(),
             strokes = strokes.map { it.rotateAntiClockwise() }.toImmutableList(),
+            shapes = shapes.map { it.rotateAntiClockwise() }.toImmutableList(),
             stickers = stickers.map { it.rotateAntiClockwise() }.toImmutableList(),
         )
     }
@@ -87,6 +106,7 @@ data class AttachmentImageEdits(
             // Also update the crop rect and the markup to keep the same selected area
             cropRect = cropRect.flipHorizontally(),
             strokes = strokes.map { it.flipHorizontally() }.toImmutableList(),
+            shapes = shapes.map { it.flipHorizontally() }.toImmutableList(),
             stickers = stickers.map { it.flipHorizontally() }.toImmutableList(),
         )
     }
@@ -97,6 +117,7 @@ data class AttachmentImageEdits(
             // Also update the crop rect and the markup to keep the same selected area
             cropRect = cropRect.flipVertically(),
             strokes = strokes.map { it.flipVertically() }.toImmutableList(),
+            shapes = shapes.map { it.flipVertically() }.toImmutableList(),
             stickers = stickers.map { it.flipVertically() }.toImmutableList(),
         )
     }
@@ -104,6 +125,26 @@ data class AttachmentImageEdits(
     fun addStroke(stroke: MarkupStroke) = copy(strokes = (strokes + stroke).toImmutableList())
 
     fun removeLastStroke() = copy(strokes = strokes.dropLast(1).toImmutableList())
+
+    fun addShape(shape: MarkupShape) = copy(shapes = (shapes + shape).toImmutableList())
+
+    fun removeLastShape() = copy(shapes = shapes.dropLast(1).toImmutableList())
+
+    /**
+     * Rubs out the strokes and shapes passing within [radius] of [point], both measured in image
+     * heights, with [aspectRatio] the width of the image over its height.
+     *
+     * Whole strokes and shapes are removed rather than the parts of them under the eraser, so
+     * that nothing invisible is left behind in the exported image.
+     */
+    fun eraseAt(
+        point: NormalizedPoint,
+        radius: Float,
+        aspectRatio: Float,
+    ) = copy(
+        strokes = strokes.filterNot { it.isNear(point, radius, aspectRatio) }.toImmutableList(),
+        shapes = shapes.filterNot { it.isNear(point, radius, aspectRatio) }.toImmutableList(),
+    )
 
     fun addSticker(sticker: MarkupSticker) = copy(stickers = (stickers + sticker).toImmutableList())
 

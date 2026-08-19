@@ -8,7 +8,14 @@
 <resources>
     <string name="screen_image_edition_a11y_crop_tool">"Crop the image"</string>
     <string name="screen_image_edition_a11y_pen_tool">"Draw on the image"</string>
-    <string name="screen_image_edition_a11y_undo_stroke">"Undo the last stroke"</string>
+    <string name="screen_image_edition_a11y_highlighter_tool">"Highlight part of the image"</string>
+    <string name="screen_image_edition_a11y_shape_tool">"Draw a shape on the image"</string>
+    <string name="screen_image_edition_a11y_eraser_tool">"Rub out the markup"</string>
+    <string name="screen_image_edition_a11y_shape_arrow">"Arrow"</string>
+    <string name="screen_image_edition_a11y_shape_line">"Line"</string>
+    <string name="screen_image_edition_a11y_shape_rectangle">"Rectangle"</string>
+    <string name="screen_image_edition_a11y_shape_ellipse">"Ellipse"</string>
+    <string name="screen_image_edition_a11y_undo">"Undo"</string>
     <string name="screen_image_edition_a11y_pen_colour_black">"Black"</string>
     <string name="screen_image_edition_a11y_pen_colour_blue">"Blue"</string>
     <string name="screen_image_edition_a11y_pen_colour_green">"Green"</string>

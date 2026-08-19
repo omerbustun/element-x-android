@@ -102,7 +102,7 @@ class DefaultAttachmentImageEditor(
 
             // Draw the markup before cropping, so that strokes outside of the crop area are trimmed
             // along with the image, exactly as they appear behind the crop overlay.
-            val markedUpBitmap = transformedBitmap.drawMarkup(edits.strokes, edits.stickers)
+            val markedUpBitmap = transformedBitmap.drawMarkup(edits.strokes, edits.shapes, edits.stickers)
             if (markedUpBitmap !== transformedBitmap) {
                 transformedBitmap.recycle()
             }
@@ -176,22 +176,27 @@ private fun Bitmap.applyEdits(edits: AttachmentImageEdits): Bitmap {
     return Bitmap.createBitmap(this, 0, 0, width, height, matrix, true)
 }
 
-internal fun Bitmap.drawMarkup(strokes: List<MarkupStroke>, stickers: List<MarkupSticker>): Bitmap {
-    if (strokes.isEmpty() && stickers.isEmpty()) {
+internal fun Bitmap.drawMarkup(
+    strokes: List<MarkupStroke>,
+    shapes: List<MarkupShape>,
+    stickers: List<MarkupSticker>,
+): Bitmap {
+    if (strokes.isEmpty() && shapes.isEmpty() && stickers.isEmpty()) {
         return this
     }
     val target = copy(Bitmap.Config.ARGB_8888, true) ?: return this
     val canvas = Canvas(target)
+    val smallestSide = minOf(target.width, target.height).toFloat()
     val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeCap = Paint.Cap.ROUND
         strokeJoin = Paint.Join.ROUND
-        strokeWidth = minOf(target.width, target.height) * MarkupStroke.RELATIVE_WIDTH
     }
     for (stroke in strokes) {
         val points = stroke.points
         if (points.isEmpty()) continue
-        paint.color = stroke.color.value.toArgb()
+        paint.color = stroke.color.value.copy(alpha = stroke.kind.alpha).toArgb()
+        paint.strokeWidth = smallestSide * stroke.kind.relativeWidth
         if (points.size == 1) {
             // A tap leaves a single point behind, which a path would not render.
             canvas.drawCircle(
@@ -210,8 +215,38 @@ internal fun Bitmap.drawMarkup(strokes: List<MarkupStroke>, stickers: List<Marku
         }
         canvas.drawPath(path, paint)
     }
+    canvas.drawShapes(shapes, target.width.toFloat(), target.height.toFloat(), paint)
     canvas.drawStickers(stickers, target.width, target.height)
     return target
+}
+
+/**
+ * Draws the shapes from the same description the editor draws from, so that a shape can't come
+ * out differently in the file than it looked on screen.
+ */
+private fun Canvas.drawShapes(
+    shapes: List<MarkupShape>,
+    width: Float,
+    height: Float,
+    paint: Paint,
+) {
+    for (shape in shapes) {
+        paint.color = shape.color.value.toArgb()
+        paint.strokeWidth = shape.strokeWidth(width, height)
+        for (polyline in shape.polylines(width, height)) {
+            if (polyline.size < 2) continue
+            val path = Path().apply {
+                moveTo(polyline[0].x, polyline[0].y)
+                for (index in 1 until polyline.size) {
+                    lineTo(polyline[index].x, polyline[index].y)
+                }
+            }
+            drawPath(path, paint)
+        }
+        shape.ovalBounds(width, height)?.let { bounds ->
+            drawOval(bounds.left, bounds.top, bounds.right, bounds.bottom, paint)
+        }
+    }
 }
 
 private fun Canvas.drawStickers(stickers: List<MarkupSticker>, width: Int, height: Int) {

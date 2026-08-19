@@ -20,7 +20,13 @@ import io.element.android.features.messages.impl.attachments.preview.SendActionS
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.AttachmentImageEditor
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.AttachmentImageEdits
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.EditedLocalMedia
+import io.element.android.features.messages.impl.attachments.preview.imageeditor.ImageEditorTool
+import io.element.android.features.messages.impl.attachments.preview.imageeditor.MarkupColor
+import io.element.android.features.messages.impl.attachments.preview.imageeditor.MarkupShape
+import io.element.android.features.messages.impl.attachments.preview.imageeditor.MarkupShapeKind
+import io.element.android.features.messages.impl.attachments.preview.imageeditor.MarkupStroke
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.NormalizedCropRect
+import io.element.android.features.messages.impl.attachments.preview.imageeditor.NormalizedPoint
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.assertIsSimilarTo
 import io.element.android.features.messages.impl.attachments.video.MediaOptimizationSelectorState
 import io.element.android.features.messages.impl.attachments.video.VideoCompressionPresetSelector
@@ -682,6 +688,88 @@ class AttachmentsPreviewPresenterTest : RobolectricTest() {
             flippedHorizontallyState.eventSink(AttachmentsPreviewEvent.FlipImageVertically)
             val flippedState = awaitItem()
             assertThat(flippedState.imageEditorState?.edits?.isFlippedVertically).isTrue()
+        }
+    }
+
+    @Test
+    fun `present - markup shapes are added, undone and rubbed out`() = runTest {
+        val presenter = createAttachmentsPreviewPresenter(displayMediaQualitySelectorViews = true)
+
+        presenter.test {
+            val initialState = awaitItem()
+            initialState.eventSink(AttachmentsPreviewEvent.OpenImageEditor)
+            val editorState = consumeItemsUntilPredicate { it.imageEditorState != null }.last()
+
+            editorState.eventSink(AttachmentsPreviewEvent.SelectImageEditorTool(ImageEditorTool.Shape))
+            val shapeToolState = awaitItem()
+            assertThat(shapeToolState.imageEditorState?.activeTool).isEqualTo(ImageEditorTool.Shape)
+
+            shapeToolState.eventSink(AttachmentsPreviewEvent.SelectMarkupShapeKind(MarkupShapeKind.Ellipse))
+            val ellipseState = awaitItem()
+            assertThat(ellipseState.imageEditorState?.shapeKind).isEqualTo(MarkupShapeKind.Ellipse)
+
+            val shape = MarkupShape(
+                kind = MarkupShapeKind.Ellipse,
+                start = NormalizedPoint(x = 0.2f, y = 0.2f),
+                end = NormalizedPoint(x = 0.8f, y = 0.8f),
+                color = MarkupColor.Red,
+            )
+            ellipseState.eventSink(AttachmentsPreviewEvent.AddMarkupShape(shape))
+            val shapeState = awaitItem()
+            assertThat(shapeState.imageEditorState?.edits?.shapes).containsExactly(shape)
+
+            // Undo follows the selected tool, so it takes the shape rather than a stroke.
+            shapeState.eventSink(AttachmentsPreviewEvent.UndoMarkup)
+            val undoneState = awaitItem()
+            assertThat(undoneState.imageEditorState?.edits?.shapes).isEmpty()
+        }
+    }
+
+    @Test
+    fun `present - the eraser removes the markup it is dragged over`() = runTest {
+        val presenter = createAttachmentsPreviewPresenter(displayMediaQualitySelectorViews = true)
+
+        presenter.test {
+            val initialState = awaitItem()
+            initialState.eventSink(AttachmentsPreviewEvent.OpenImageEditor)
+            val editorState = consumeItemsUntilPredicate { it.imageEditorState != null }.last()
+
+            val stroke = MarkupStroke(
+                points = persistentListOf(NormalizedPoint(x = 0.5f, y = 0.5f)),
+                color = MarkupColor.Red,
+            )
+            editorState.eventSink(AttachmentsPreviewEvent.AddMarkupStroke(stroke))
+            val strokeState = awaitItem()
+            assertThat(strokeState.imageEditorState?.edits?.strokes).containsExactly(stroke)
+
+            strokeState.eventSink(
+                AttachmentsPreviewEvent.EraseMarkup(
+                    point = NormalizedPoint(x = 0.5f, y = 0.5f),
+                    aspectRatio = 1f,
+                )
+            )
+            val erasedState = awaitItem()
+            assertThat(erasedState.imageEditorState?.edits?.strokes).isEmpty()
+        }
+    }
+
+    @Test
+    fun `present - leaving the sticker tool clears the selected sticker`() = runTest {
+        val presenter = createAttachmentsPreviewPresenter(displayMediaQualitySelectorViews = true)
+
+        presenter.test {
+            val initialState = awaitItem()
+            initialState.eventSink(AttachmentsPreviewEvent.OpenImageEditor)
+            val editorState = consumeItemsUntilPredicate { it.imageEditorState != null }.last()
+
+            editorState.eventSink(AttachmentsPreviewEvent.SelectImageEditorTool(ImageEditorTool.Sticker))
+            val stickerToolState = awaitItem()
+            stickerToolState.eventSink(AttachmentsPreviewEvent.AddEmojiSticker("🚀"))
+            val stickerState = consumeItemsUntilPredicate { it.imageEditorState?.selectedStickerId != null }.last()
+
+            stickerState.eventSink(AttachmentsPreviewEvent.SelectImageEditorTool(ImageEditorTool.Pen))
+            val penState = awaitItem()
+            assertThat(penState.imageEditorState?.selectedStickerId).isNull()
         }
     }
 

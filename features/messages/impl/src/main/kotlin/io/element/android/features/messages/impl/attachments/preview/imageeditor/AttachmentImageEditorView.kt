@@ -120,7 +120,10 @@ fun AttachmentImageEditorView(
     onToolSelect: (ImageEditorTool) -> Unit,
     onMarkupColorSelect: (MarkupColor) -> Unit,
     onStrokeAdd: (MarkupStroke) -> Unit,
-    onUndoStrokeClick: () -> Unit,
+    onShapeKindSelect: (MarkupShapeKind) -> Unit,
+    onShapeAdd: (MarkupShape) -> Unit,
+    onErase: (NormalizedPoint, Float) -> Unit,
+    onUndoClick: () -> Unit,
     onStickerPickerRequest: (StickerPicker) -> Unit,
     onEmojiStickerAdd: (String) -> Unit,
     onTextStickerAdd: (String) -> Unit,
@@ -190,6 +193,8 @@ fun AttachmentImageEditorView(
                     state = state,
                     onCropRectChange = onCropRectChange,
                     onStrokeAdd = onStrokeAdd,
+                    onShapeAdd = onShapeAdd,
+                    onErase = onErase,
                     onStickerChange = onStickerChange,
                     onStickerSelect = onStickerSelect,
                     onStickerRemove = onStickerRemove,
@@ -202,7 +207,14 @@ fun AttachmentImageEditorView(
                     .navigationBarsPadding()
                     .padding(start = 20.dp, top = 18.dp, end = 20.dp, bottom = 18.dp),
             ) {
-                if (state.activeTool != ImageEditorTool.Crop) {
+                if (state.activeTool == ImageEditorTool.Shape) {
+                    ShapeKindPicker(
+                        modifier = Modifier.align(Alignment.CenterHorizontally),
+                        selectedKind = state.shapeKind,
+                        onShapeKindSelect = onShapeKindSelect,
+                    )
+                }
+                if (state.activeTool.usesMarkupColor) {
                     MarkupColorPicker(
                         selectedColor = state.markupColor,
                         onMarkupColorSelect = onMarkupColorSelect,
@@ -270,17 +282,25 @@ fun AttachmentImageEditorView(
                                     )
                                 }
                             }
-                            ImageEditorTool.Pen -> {
+                            ImageEditorTool.Pen,
+                            ImageEditorTool.Highlighter,
+                            ImageEditorTool.Shape -> {
                                 IconButton(
-                                    onClick = onUndoStrokeClick,
-                                    enabled = state.edits.strokes.isNotEmpty(),
+                                    onClick = onUndoClick,
+                                    enabled = if (state.activeTool == ImageEditorTool.Shape) {
+                                        state.edits.shapes.isNotEmpty()
+                                    } else {
+                                        state.edits.strokes.isNotEmpty()
+                                    },
                                 ) {
                                     Icon(
                                         imageVector = CompoundIcons.Restart(),
-                                        contentDescription = stringResource(R.string.screen_image_edition_a11y_undo_stroke),
+                                        contentDescription = stringResource(R.string.screen_image_edition_a11y_undo),
                                     )
                                 }
                             }
+                            // Erasing is itself the way markup is removed, so there is nothing to undo.
+                            ImageEditorTool.Eraser -> Unit
                             ImageEditorTool.Sticker -> {
                                 IconButton(onClick = { onStickerPickerRequest(StickerPicker.Emoji) }) {
                                     Icon(
@@ -374,6 +394,9 @@ private fun ToolPicker(
             val label = when (tool) {
                 ImageEditorTool.Crop -> stringResource(R.string.screen_image_edition_a11y_crop_tool)
                 ImageEditorTool.Pen -> stringResource(R.string.screen_image_edition_a11y_pen_tool)
+                ImageEditorTool.Highlighter -> stringResource(R.string.screen_image_edition_a11y_highlighter_tool)
+                ImageEditorTool.Shape -> stringResource(R.string.screen_image_edition_a11y_shape_tool)
+                ImageEditorTool.Eraser -> stringResource(R.string.screen_image_edition_a11y_eraser_tool)
                 ImageEditorTool.Sticker -> stringResource(R.string.screen_image_edition_a11y_sticker_tool)
             }
             IconButton(
@@ -389,6 +412,9 @@ private fun ToolPicker(
                     imageVector = when (tool) {
                         ImageEditorTool.Crop -> CompoundIcons.Crop()
                         ImageEditorTool.Pen -> CompoundIcons.Edit()
+                        ImageEditorTool.Highlighter -> CompoundIcons.EditSolid()
+                        ImageEditorTool.Shape -> CompoundIcons.ArrowUpRight()
+                        ImageEditorTool.Eraser -> CompoundIcons.Delete()
                         ImageEditorTool.Sticker -> CompoundIcons.Sticker()
                     },
                     contentDescription = null,
@@ -397,6 +423,48 @@ private fun ToolPicker(
             }
         }
     }
+}
+
+@Composable
+private fun ShapeKindPicker(
+    selectedKind: MarkupShapeKind,
+    onShapeKindSelect: (MarkupShapeKind) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val selectedStateDescription = stringResource(R.string.screen_image_edition_a11y_selected)
+    Row(modifier = modifier.padding(bottom = 12.dp)) {
+        for (kind in MarkupShapeKind.entries) {
+            val isSelected = kind == selectedKind
+            val label = stringResource(kind.a11yLabelResourceId())
+            IconButton(
+                onClick = { onShapeKindSelect(kind) },
+                modifier = Modifier.clearAndSetSemantics {
+                    contentDescription = label
+                    if (isSelected) {
+                        stateDescription = selectedStateDescription
+                    }
+                },
+            ) {
+                Icon(
+                    imageVector = when (kind) {
+                        MarkupShapeKind.Arrow -> CompoundIcons.ArrowUpRight()
+                        MarkupShapeKind.Line -> CompoundIcons.Minus()
+                        MarkupShapeKind.Rectangle -> CompoundIcons.Stop()
+                        MarkupShapeKind.Ellipse -> CompoundIcons.Circle()
+                    },
+                    contentDescription = null,
+                    tint = if (isSelected) ElementTheme.colors.iconAccentPrimary else ElementTheme.colors.iconSecondary,
+                )
+            }
+        }
+    }
+}
+
+private fun MarkupShapeKind.a11yLabelResourceId() = when (this) {
+    MarkupShapeKind.Arrow -> R.string.screen_image_edition_a11y_shape_arrow
+    MarkupShapeKind.Line -> R.string.screen_image_edition_a11y_shape_line
+    MarkupShapeKind.Rectangle -> R.string.screen_image_edition_a11y_shape_rectangle
+    MarkupShapeKind.Ellipse -> R.string.screen_image_edition_a11y_shape_ellipse
 }
 
 @Composable
@@ -460,6 +528,8 @@ private fun BoxScope.ImageEditorCanvas(
     state: AttachmentImageEditorState,
     onCropRectChange: (NormalizedCropRect) -> Unit,
     onStrokeAdd: (MarkupStroke) -> Unit,
+    onShapeAdd: (MarkupShape) -> Unit,
+    onErase: (NormalizedPoint, Float) -> Unit,
     onStickerChange: (MarkupSticker) -> Unit,
     onStickerSelect: (Long?) -> Unit,
     onStickerRemove: (Long) -> Unit,
@@ -567,6 +637,8 @@ private fun BoxScope.ImageEditorCanvas(
         val latestPenColor by rememberUpdatedState(state.markupColor)
         val latestImageRect by rememberUpdatedState(imageRect)
         var strokeInProgress by remember { mutableStateOf(persistentListOf<NormalizedPoint>().toImmutableList()) }
+        var shapeInProgress by remember { mutableStateOf<MarkupShape?>(null) }
+        val latestShapeKind by rememberUpdatedState(state.shapeKind)
         val drawGuidelines = dragTarget == CropDragTarget.Move || state.previewDebug
         val gestureModifier = when (state.activeTool) {
             ImageEditorTool.Crop -> Modifier.pointerInput(state.activeTool) {
@@ -604,7 +676,8 @@ private fun BoxScope.ImageEditorCanvas(
                 // A tap on the image itself, rather than on a sticker, clears the selection.
                 detectTapGestures { onStickerSelect(null) }
             }
-            ImageEditorTool.Pen -> Modifier.pointerInput(state.activeTool) {
+            ImageEditorTool.Pen, ImageEditorTool.Highlighter -> Modifier.pointerInput(state.activeTool) {
+                val strokeKind = state.activeTool.strokeKind ?: return@pointerInput
                 detectDragGestures(
                     onDragStart = { offset ->
                         strokeInProgress = persistentListOf(offset.toNormalizedPoint(latestImageRect)).toImmutableList()
@@ -616,12 +689,51 @@ private fun BoxScope.ImageEditorCanvas(
                         val points = strokeInProgress
                         strokeInProgress = persistentListOf<NormalizedPoint>().toImmutableList()
                         if (points.isNotEmpty()) {
-                            onStrokeAdd(MarkupStroke(points = points, color = latestPenColor))
+                            onStrokeAdd(MarkupStroke(points = points, color = latestPenColor, kind = strokeKind))
                         }
                     },
                 ) { change, _ ->
                     change.consume()
                     strokeInProgress = (strokeInProgress + change.position.toNormalizedPoint(latestImageRect)).toImmutableList()
+                }
+            }
+            ImageEditorTool.Shape -> Modifier.pointerInput(state.activeTool) {
+                detectDragGestures(
+                    onDragStart = { offset ->
+                        val point = offset.toNormalizedPoint(latestImageRect)
+                        shapeInProgress = MarkupShape(
+                            kind = latestShapeKind,
+                            start = point,
+                            end = point,
+                            color = latestPenColor,
+                        )
+                    },
+                    onDragCancel = {
+                        shapeInProgress = null
+                    },
+                    onDragEnd = {
+                        val shape = shapeInProgress
+                        shapeInProgress = null
+                        // A tap leaves a shape with no size behind, which would draw nothing.
+                        if (shape != null && shape.start != shape.end) {
+                            onShapeAdd(shape)
+                        }
+                    },
+                ) { change, _ ->
+                    change.consume()
+                    shapeInProgress = shapeInProgress?.copy(end = change.position.toNormalizedPoint(latestImageRect))
+                }
+            }
+            ImageEditorTool.Eraser -> Modifier.pointerInput(state.activeTool) {
+                // Read from the latest rect on each touch, so that erasing still reaches the
+                // markup after the image has been rotated underneath it.
+                fun erase(offset: Offset) = onErase(
+                    offset.toNormalizedPoint(latestImageRect),
+                    latestImageRect.aspectRatio(),
+                )
+                detectDragGestures(onDragStart = ::erase) { change, _ ->
+                    change.consume()
+                    erase(change.position)
                 }
             }
         }
@@ -634,7 +746,10 @@ private fun BoxScope.ImageEditorCanvas(
             MarkupOverlay(
                 imageSize = DpSize(displayedWidthDp, displayedHeightDp),
                 strokes = state.edits.strokes,
+                shapes = state.edits.shapes,
                 strokeInProgress = strokeInProgress,
+                strokeKindInProgress = state.activeTool.strokeKind,
+                shapeInProgress = shapeInProgress,
                 markupColor = state.markupColor,
             )
             StickerLayer(
@@ -799,17 +914,59 @@ private fun BoxScope.StickerItem(
 private fun MarkupOverlay(
     imageSize: DpSize,
     strokes: ImmutableList<MarkupStroke>,
+    shapes: ImmutableList<MarkupShape>,
     strokeInProgress: ImmutableList<NormalizedPoint>,
+    strokeKindInProgress: MarkupStrokeKind?,
+    shapeInProgress: MarkupShape?,
     markupColor: MarkupColor,
 ) {
     Canvas(
         modifier = Modifier.size(imageSize.width, imageSize.height)
     ) {
-        val strokeWidth = minOf(size.width, size.height) * MarkupStroke.RELATIVE_WIDTH
+        val smallestSide = minOf(size.width, size.height)
         for (stroke in strokes) {
-            drawMarkupStroke(points = stroke.points, color = stroke.color.value, strokeWidth = strokeWidth)
+            drawMarkupStroke(
+                points = stroke.points,
+                color = stroke.color.value.copy(alpha = stroke.kind.alpha),
+                strokeWidth = smallestSide * stroke.kind.relativeWidth,
+            )
         }
-        drawMarkupStroke(points = strokeInProgress, color = markupColor.value, strokeWidth = strokeWidth)
+        if (strokeKindInProgress != null) {
+            drawMarkupStroke(
+                points = strokeInProgress,
+                color = markupColor.value.copy(alpha = strokeKindInProgress.alpha),
+                strokeWidth = smallestSide * strokeKindInProgress.relativeWidth,
+            )
+        }
+        for (shape in shapes + listOfNotNull(shapeInProgress)) {
+            drawMarkupShape(shape)
+        }
+    }
+}
+
+private fun DrawScope.drawMarkupShape(shape: MarkupShape) {
+    val style = Stroke(
+        width = shape.strokeWidth(size.width, size.height),
+        cap = StrokeCap.Round,
+        join = StrokeJoin.Round,
+    )
+    for (polyline in shape.polylines(size.width, size.height)) {
+        if (polyline.size < 2) continue
+        val path = Path().apply {
+            moveTo(polyline[0].x, polyline[0].y)
+            for (index in 1 until polyline.size) {
+                lineTo(polyline[index].x, polyline[index].y)
+            }
+        }
+        drawPath(path = path, color = shape.color.value, style = style)
+    }
+    shape.ovalBounds(size.width, size.height)?.let { bounds ->
+        drawOval(
+            color = shape.color.value,
+            topLeft = bounds.topLeft,
+            size = bounds.size,
+            style = style,
+        )
     }
 }
 
@@ -840,6 +997,8 @@ private fun DrawScope.drawMarkupStroke(
         style = Stroke(width = strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round),
     )
 }
+
+private fun Rect.aspectRatio() = if (height > 0f) width / height else 1f
 
 private fun Offset.toNormalizedPoint(imageRect: Rect): NormalizedPoint {
     val width = imageRect.width.takeIf { it > 0f } ?: 1f
@@ -1153,7 +1312,10 @@ internal fun AttachmentImageEditorViewPreview(
         onToolSelect = {},
         onMarkupColorSelect = {},
         onStrokeAdd = {},
-        onUndoStrokeClick = {},
+        onShapeKindSelect = {},
+        onShapeAdd = {},
+        onErase = { _, _ -> },
+        onUndoClick = {},
         onStickerPickerRequest = {},
         onEmojiStickerAdd = {},
         onTextStickerAdd = {},
