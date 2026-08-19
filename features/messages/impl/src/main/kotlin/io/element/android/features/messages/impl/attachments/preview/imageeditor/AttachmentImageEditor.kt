@@ -193,9 +193,8 @@ internal fun Bitmap.drawMarkup(
         strokeCap = Paint.Cap.ROUND
         strokeJoin = Paint.Join.ROUND
     }
-    for (stroke in strokes) {
+    for (stroke in strokes.filter { it.points.isNotEmpty() }) {
         val points = stroke.points
-        if (points.isEmpty()) continue
         paint.color = stroke.color.value.copy(alpha = stroke.kind.alpha).toArgb()
         paint.strokeWidth = smallestSide * stroke.kind.relativeWidth
         if (points.size == 1) {
@@ -206,15 +205,15 @@ internal fun Bitmap.drawMarkup(
                 paint.strokeWidth / 2f,
                 Paint(paint).apply { style = Paint.Style.FILL },
             )
-            continue
-        }
-        val path = Path().apply {
-            moveTo(points[0].x * target.width, points[0].y * target.height)
-            for (index in 1 until points.size) {
-                lineTo(points[index].x * target.width, points[index].y * target.height)
+        } else {
+            val path = Path().apply {
+                moveTo(points[0].x * target.width, points[0].y * target.height)
+                for (index in 1 until points.size) {
+                    lineTo(points[index].x * target.width, points[index].y * target.height)
+                }
             }
+            canvas.drawPath(path, paint)
         }
-        canvas.drawPath(path, paint)
     }
     canvas.drawShapes(shapes, target.width.toFloat(), target.height.toFloat(), paint)
     canvas.drawStickers(stickers, target.width, target.height)
