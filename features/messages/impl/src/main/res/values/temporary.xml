@@ -28,4 +28,9 @@
     <string name="screen_image_edition_a11y_sticker_tool">"Add emojis and text to the image"</string>
     <string name="screen_image_edition_a11y_add_emoji">"Add emoji"</string>
     <string name="screen_image_edition_a11y_add_text">"Add text"</string>
+    <string name="screen_image_edition_a11y_font_sans_serif">"Sans serif"</string>
+    <string name="screen_image_edition_a11y_font_serif">"Serif"</string>
+    <string name="screen_image_edition_a11y_font_monospace">"Monospace"</string>
+    <string name="screen_image_edition_a11y_font_cursive">"Cursive"</string>
+    <string name="screen_image_edition_font_sample">"Ag"</string>
 </resources>

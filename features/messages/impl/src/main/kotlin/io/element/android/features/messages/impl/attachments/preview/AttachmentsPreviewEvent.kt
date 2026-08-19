@@ -11,6 +11,7 @@ package io.element.android.features.messages.impl.attachments.preview
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.DrawTool
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.ImageEditorEntryPoint
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.MarkupColor
+import io.element.android.features.messages.impl.attachments.preview.imageeditor.MarkupFont
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.MarkupShape
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.MarkupShapeKind
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.MarkupSticker
@@ -33,6 +34,7 @@ sealed interface AttachmentsPreviewEvent {
     data class UpdateImageCropRect(val cropRect: NormalizedCropRect) : AttachmentsPreviewEvent
     data class SelectDrawTool(val tool: DrawTool) : AttachmentsPreviewEvent
     data class SelectMarkupColor(val color: MarkupColor) : AttachmentsPreviewEvent
+    data class SelectMarkupFont(val font: MarkupFont) : AttachmentsPreviewEvent
     data class AddMarkupStroke(val stroke: MarkupStroke) : AttachmentsPreviewEvent
     data class SelectMarkupShapeKind(val kind: MarkupShapeKind) : AttachmentsPreviewEvent
     data class AddMarkupShape(val shape: MarkupShape) : AttachmentsPreviewEvent

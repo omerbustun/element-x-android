@@ -14,6 +14,7 @@ import android.graphics.Canvas
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.Typeface
 import android.net.Uri
 import android.text.Layout
 import android.text.StaticLayout
@@ -249,6 +250,15 @@ private fun Canvas.drawShapes(
     }
 }
 
+private val MarkupFont.typeface: Typeface
+    get() = when (this) {
+        // Matches the families the editor draws with, so that the text keeps its shape.
+        MarkupFont.SansSerif -> Typeface.SANS_SERIF
+        MarkupFont.Serif -> Typeface.SERIF
+        MarkupFont.Monospace -> Typeface.MONOSPACE
+        MarkupFont.Cursive -> Typeface.create("cursive", Typeface.NORMAL)
+    }
+
 private fun Canvas.drawStickers(stickers: List<MarkupSticker>, width: Int, height: Int) {
     if (stickers.isEmpty()) return
     val smallestSide = minOf(width, height)
@@ -258,6 +268,7 @@ private fun Canvas.drawStickers(stickers: List<MarkupSticker>, width: Int, heigh
         if (fontSize <= 0f || sticker.text.isEmpty()) continue
         textPaint.textSize = fontSize
         textPaint.color = sticker.color?.value?.toArgb() ?: android.graphics.Color.WHITE
+        textPaint.typeface = sticker.font?.typeface
         // Keep light stickers legible on light images, matching the shadow drawn on screen.
         textPaint.setShadowLayer(fontSize / 12f, 0f, fontSize / 32f, STICKER_SHADOW_COLOR)
         // A width the text will never reach, so that it only breaks on the newlines the user typed.

@@ -31,13 +31,23 @@ data class AttachmentImageEditorState(
     // For preview only
     val previewDebug: Boolean,
 ) {
-    /** Whether the palette is shown: the drawing tools take a colour, and so does text. */
+    val selectedSticker: MarkupSticker?
+        get() = edits.stickers.firstOrNull { it.id == selectedStickerId }
+
+    /**
+     * Whether the palette is shown. An emoji is drawn in its own colours, so it is only offered
+     * where it applies: to the drawing tools, and to text.
+     */
     val showsMarkupColorPicker: Boolean
         get() = when (activeTool) {
             ImageEditorTool.Crop -> false
-            ImageEditorTool.Sticker -> true
+            ImageEditorTool.Sticker -> selectedSticker?.isText == true
             ImageEditorTool.Draw -> drawTool != DrawTool.Eraser
         }
+
+    /** The font picker is only shown whilst a piece of text is selected. */
+    val showsFontPicker: Boolean
+        get() = activeTool == ImageEditorTool.Sticker && selectedSticker?.isText == true
 }
 
 /**

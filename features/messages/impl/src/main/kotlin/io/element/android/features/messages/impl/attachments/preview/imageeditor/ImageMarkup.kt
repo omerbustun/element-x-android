@@ -210,12 +210,26 @@ data class MarkupShape(
 }
 
 /**
+ * The typefaces text can be written in.
+ */
+enum class MarkupFont {
+    SansSerif,
+    Serif,
+    Monospace,
+    Cursive,
+}
+
+/**
  * A piece of content the user has placed on top of the image: an emoji, or some text.
  */
 @Immutable
 sealed interface MarkupStickerContent {
     data class Emoji(val unicode: String) : MarkupStickerContent
-    data class Text(val text: String, val color: MarkupColor) : MarkupStickerContent
+    data class Text(
+        val text: String,
+        val color: MarkupColor,
+        val font: MarkupFont = MarkupFont.SansSerif,
+    ) : MarkupStickerContent
 }
 
 /**
@@ -240,6 +254,12 @@ data class MarkupSticker(
 
     val color: MarkupColor?
         get() = (content as? MarkupStickerContent.Text)?.color
+
+    val font: MarkupFont?
+        get() = (content as? MarkupStickerContent.Text)?.font
+
+    val isText: Boolean
+        get() = content is MarkupStickerContent.Text
 
     fun rotateAntiClockwise() = copy(
         center = center.rotateAntiClockwise(),

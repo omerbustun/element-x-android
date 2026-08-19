@@ -154,6 +154,7 @@ fun AttachmentsPreviewView(
             },
             onDrawToolSelect = { tool -> state.eventSink(AttachmentsPreviewEvent.SelectDrawTool(tool)) },
             onMarkupColorSelect = { color -> state.eventSink(AttachmentsPreviewEvent.SelectMarkupColor(color)) },
+            onMarkupFontSelect = { font -> state.eventSink(AttachmentsPreviewEvent.SelectMarkupFont(font)) },
             onStrokeAdd = { stroke -> state.eventSink(AttachmentsPreviewEvent.AddMarkupStroke(stroke)) },
             onShapeKindSelect = { kind -> state.eventSink(AttachmentsPreviewEvent.SelectMarkupShapeKind(kind)) },
             onShapeAdd = { shape -> state.eventSink(AttachmentsPreviewEvent.AddMarkupShape(shape)) },

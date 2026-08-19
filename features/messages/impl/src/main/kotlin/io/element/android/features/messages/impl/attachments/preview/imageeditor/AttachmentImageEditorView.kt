@@ -69,6 +69,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
@@ -103,11 +104,16 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlin.math.min
 import kotlin.math.roundToInt
 
 private val minHandleTouchRadius = 16.dp
 private val maxHandleTouchRadius = 56.dp
+
+/** How far beyond the glyph a sticker still takes touches, so a pinch lands on it. */
+private val STICKER_TOUCH_MARGIN = 16.dp
 
 /**
  * Ref: https://www.figma.com/design/zftpgS6LjiczobJZ1GUNpt/Updates-to-Media---File-Upload?node-id=51-3539
@@ -119,6 +125,7 @@ fun AttachmentImageEditorView(
     onCropRectChange: (NormalizedCropRect) -> Unit,
     onDrawToolSelect: (DrawTool) -> Unit,
     onMarkupColorSelect: (MarkupColor) -> Unit,
+    onMarkupFontSelect: (MarkupFont) -> Unit,
     onStrokeAdd: (MarkupStroke) -> Unit,
     onShapeKindSelect: (MarkupShapeKind) -> Unit,
     onShapeAdd: (MarkupShape) -> Unit,
@@ -212,6 +219,12 @@ fun AttachmentImageEditorView(
                         modifier = Modifier.align(Alignment.CenterHorizontally),
                         selectedKind = state.shapeKind,
                         onShapeKindSelect = onShapeKindSelect,
+                    )
+                }
+                if (state.showsFontPicker) {
+                    FontPicker(
+                        selectedFont = state.selectedSticker?.font,
+                        onMarkupFontSelect = onMarkupFontSelect,
                     )
                 }
                 if (state.showsMarkupColorPicker) {
@@ -494,6 +507,63 @@ private fun MarkupColorPicker(
                         )
                 )
             }
+        }
+    }
+}
+
+private val MarkupFont.fontFamily: FontFamily
+    get() = when (this) {
+        MarkupFont.SansSerif -> FontFamily.SansSerif
+        MarkupFont.Serif -> FontFamily.Serif
+        MarkupFont.Monospace -> FontFamily.Monospace
+        MarkupFont.Cursive -> FontFamily.Cursive
+    }
+
+private fun MarkupFont.a11yLabelResourceId() = when (this) {
+    MarkupFont.SansSerif -> R.string.screen_image_edition_a11y_font_sans_serif
+    MarkupFont.Serif -> R.string.screen_image_edition_a11y_font_serif
+    MarkupFont.Monospace -> R.string.screen_image_edition_a11y_font_monospace
+    MarkupFont.Cursive -> R.string.screen_image_edition_a11y_font_cursive
+}
+
+@Composable
+private fun FontPicker(
+    selectedFont: MarkupFont?,
+    onMarkupFontSelect: (MarkupFont) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val selectedStateDescription = stringResource(R.string.screen_image_edition_a11y_selected)
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(bottom = 12.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+    ) {
+        for (font in MarkupFont.entries) {
+            val isSelected = font == selectedFont
+            val label = stringResource(font.a11yLabelResourceId())
+            Text(
+                text = stringResource(R.string.screen_image_edition_font_sample),
+                style = ElementTheme.typography.fontBodyLgMedium.copy(fontFamily = font.fontFamily),
+                color = if (isSelected) ElementTheme.colors.textPrimary else ElementTheme.colors.textSecondary,
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .clickable { onMarkupFontSelect(font) }
+                    .then(
+                        if (isSelected) {
+                            Modifier.border(1.dp, ElementTheme.colors.borderInteractivePrimary, CircleShape)
+                        } else {
+                            Modifier
+                        }
+                    )
+                    .padding(horizontal = 12.dp, vertical = 4.dp)
+                    .clearAndSetSemantics {
+                        contentDescription = label
+                        if (isSelected) {
+                            stateDescription = selectedStateDescription
+                        }
+                    },
+            )
         }
     }
 }
@@ -824,32 +894,40 @@ private fun BoxScope.StickerItem(
                     y = ((sticker.center.y - 0.5f) * containerHeightPx).roundToInt(),
                 )
             }
+            // A pinch puts the fingers either side of the sticker, well outside the glyph
+            // itself, so the touch area is grown to keep both of them on it.
+            .padding(STICKER_TOUCH_MARGIN)
             // The gestures sit outside the rotation, so that a drag moves the sticker across the
             // screen rather than along its own, rotated, axes.
             .then(
                 if (isInteractive) {
-                    Modifier
-                        .pointerInput(sticker.id) {
-                            detectTapGestures { onStickerSelect(latestSticker.id) }
-                        }
-                        .pointerInput(sticker.id) {
-                            detectTransformGestures { _, pan, zoom, rotation ->
-                                val current = latestSticker
-                                if (!isSelectedNow) {
-                                    onStickerSelect(current.id)
-                                }
-                                onStickerChange(
-                                    current.copy(
-                                        center = NormalizedPoint(
-                                            x = (current.center.x + pan.x / containerWidthPx).coerceIn(0f, 1f),
-                                            y = (current.center.y + pan.y / containerHeightPx).coerceIn(0f, 1f),
-                                        ),
-                                        scale = (current.scale * zoom).coerceIn(MarkupSticker.MIN_SCALE, MarkupSticker.MAX_SCALE),
-                                        rotationDegrees = current.rotationDegrees + rotation,
+                    // Both detectors have to share one input scope, otherwise the tap detector
+                    // takes the first pointer and the transform one never sees the second.
+                    Modifier.pointerInput(sticker.id) {
+                        coroutineScope {
+                            launch {
+                                detectTapGestures { onStickerSelect(latestSticker.id) }
+                            }
+                            launch {
+                                detectTransformGestures { _, pan, zoom, rotation ->
+                                    val current = latestSticker
+                                    if (!isSelectedNow) {
+                                        onStickerSelect(current.id)
+                                    }
+                                    onStickerChange(
+                                        current.copy(
+                                            center = NormalizedPoint(
+                                                x = (current.center.x + pan.x / containerWidthPx).coerceIn(0f, 1f),
+                                                y = (current.center.y + pan.y / containerHeightPx).coerceIn(0f, 1f),
+                                            ),
+                                            scale = (current.scale * zoom).coerceIn(MarkupSticker.MIN_SCALE, MarkupSticker.MAX_SCALE),
+                                            rotationDegrees = current.rotationDegrees + rotation,
+                                        )
                                     )
-                                )
+                                }
                             }
                         }
+                    }
                 } else {
                     Modifier
                 }
@@ -863,6 +941,7 @@ private fun BoxScope.StickerItem(
             textAlign = TextAlign.Center,
             style = LocalTextStyle.current.copy(
                 fontSize = fontSize,
+                fontFamily = sticker.font?.fontFamily,
                 // Keep light stickers legible on light images, matching the shadow drawn on export.
                 shadow = Shadow(
                     color = Color.Black.copy(alpha = 0.35f),
@@ -883,7 +962,7 @@ private fun BoxScope.StickerItem(
         if (isSelected && isInteractive) {
             IconButton(
                 onClick = { onStickerRemove(sticker.id) },
-                modifier = Modifier.align(Alignment.TopStart),
+                modifier = Modifier.align(Alignment.TopEnd),
             ) {
                 Icon(
                     imageVector = CompoundIcons.Close(),
@@ -1299,6 +1378,7 @@ internal fun AttachmentImageEditorViewPreview(
         onCropRectChange = {},
         onDrawToolSelect = {},
         onMarkupColorSelect = {},
+        onMarkupFontSelect = {},
         onStrokeAdd = {},
         onShapeKindSelect = {},
         onShapeAdd = {},

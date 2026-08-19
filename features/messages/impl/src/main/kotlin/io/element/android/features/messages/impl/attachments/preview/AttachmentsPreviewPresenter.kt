@@ -31,6 +31,7 @@ import io.element.android.features.messages.impl.attachments.preview.imageeditor
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.DrawTool
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.ERASER_RELATIVE_RADIUS
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.MarkupColor
+import io.element.android.features.messages.impl.attachments.preview.imageeditor.MarkupFont
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.MarkupShapeKind
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.MarkupSticker
 import io.element.android.features.messages.impl.attachments.preview.imageeditor.MarkupStickerContent
@@ -374,9 +375,30 @@ class AttachmentsPreviewPresenter(
                             pendingState.edits
                         } else {
                             pendingState.edits.updateSticker(
-                                selectedText.copy(content = MarkupStickerContent.Text(selectedText.text, event.color))
+                                selectedText.copy(
+                                    content = MarkupStickerContent.Text(
+                                        text = selectedText.text,
+                                        color = event.color,
+                                        font = selectedText.font ?: MarkupFont.SansSerif,
+                                    )
+                                )
                             )
                         },
+                    )
+                }
+                is AttachmentsPreviewEvent.SelectMarkupFont -> {
+                    val pendingState = imageEditorState ?: return
+                    val selectedText = pendingState.selectedSticker?.takeIf { it.isText } ?: return
+                    imageEditorState = pendingState.copy(
+                        edits = pendingState.edits.updateSticker(
+                            selectedText.copy(
+                                content = MarkupStickerContent.Text(
+                                    text = selectedText.text,
+                                    color = selectedText.color ?: pendingState.markupColor,
+                                    font = event.font,
+                                )
+                            )
+                        )
                     )
                 }
                 is AttachmentsPreviewEvent.AddMarkupStroke -> {
